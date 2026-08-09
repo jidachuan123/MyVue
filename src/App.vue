@@ -4,7 +4,7 @@
 <template>
   <div class="app-container">
     <header class="app-header">
-      <h1>Spring Cloud 用户管理系统</h1>
+      <h1>Spring Cloud 架构系统</h1>
       <p class="subtitle">Eureka + Feign 微服务架构</p>
       <nav class="nav-links">
         <router-link to="/" active-class="active">商品列表</router-link>
