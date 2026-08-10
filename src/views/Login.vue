@@ -35,8 +35,9 @@ const handleLogin = () => {
     // 模拟账号验证：admin / 123456
     if (username.value === 'admin' && password.value === '123456') {
       successMsg.value = '登录成功，正在跳转...'
+      localStorage.setItem('isLogin', 'true')
       setTimeout(() => {
-        router.push('/')
+        router.push('/home')
       }, 800)
     } else {
       errorMsg.value = '用户名或密码错误（试试 admin / 123456）'
@@ -45,7 +46,7 @@ const handleLogin = () => {
 }
 
 const goBack = () => {
-  router.push('/')
+  router.push('/home')
 }
 </script>
 

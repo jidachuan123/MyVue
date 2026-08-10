@@ -1,15 +1,31 @@
 <script setup>
+import { ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+
+const route = useRoute()
+const router = useRouter()
+const isLoginPage = ref(route.path === '/login')
+
+watch(() => route.path, (newPath) => {
+  isLoginPage.value = newPath === '/login'
+})
+
+const logout = () => {
+  localStorage.removeItem('isLogin')
+  router.push('/login')
+}
 </script>
 
 <template>
   <div class="app-container">
-    <header class="app-header">
+    <header class="app-header" v-if="!isLoginPage">
       <h1>Spring Cloud 架构系统</h1>
       <p class="subtitle">Eureka + Feign 微服务架构</p>
       <nav class="nav-links">
-        <router-link to="/" active-class="active">商品列表</router-link>
+        <router-link to="/home" active-class="active">商品列表</router-link>
         <router-link to="/report" active-class="active">盘点报表</router-link>
         <router-link to="/external" active-class="active">外部对接</router-link>
+        <a class="logout-btn" @click="logout">退出</a>
       </nav>
     </header>
     <main>
@@ -65,6 +81,15 @@ body {
 }
 .nav-links a:hover,
 .nav-links a.active {
+  background: rgba(255,255,255,0.2);
+}
+.logout-btn {
+  color: #fff;
+  cursor: pointer;
+  opacity: 0.7;
+}
+.logout-btn:hover {
+  opacity: 1;
   background: rgba(255,255,255,0.2);
 }
 </style>
