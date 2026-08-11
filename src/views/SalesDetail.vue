@@ -1,11 +1,63 @@
 <script setup>
 import { ref, computed } from 'vue'
+import request from '../utils/request'
 
 // ========== 同比/环比列显隐开关 ==========
 const showYoY = ref(true)
 const showMoM = ref(true)
 
-// ========== 写死数据 ==========
+// ========== 查询参数（用户输入，不写死） ==========
+const queryForm = ref({
+  startDate: '2026-08-10',
+  endDate: '2026-08-10',
+  cmpStartDate: '2025-08-10',
+  cmpEndDate: '2025-08-10',
+  orgCode: '1101001'
+})
+const deptGroupFilter = ref('')
+
+// ========== API 数据 ==========
+const apiData = ref(null)
+const apiLoading = ref(false)
+const apiError = ref('')
+
+async function fetchData() {
+  apiLoading.value = true
+  apiError.value = ''
+  try {
+    const res = await request.get('/provider/sales/detail', {
+      tenantId: '8',
+      startDate: queryForm.value.startDate,
+      endDate: queryForm.value.endDate,
+      cmpStartDate: queryForm.value.cmpStartDate,
+      cmpEndDate: queryForm.value.cmpEndDate,
+      orgCode: queryForm.value.orgCode,
+      deptLevels: '3',
+      showStore: '显示门店'
+    })
+    apiData.value = res
+  } catch (e) {
+    apiError.value = '数据加载失败: ' + (e.message || '未知错误')
+    apiData.value = null
+  } finally {
+    apiLoading.value = false
+  }
+}
+
+function resetForm() {
+  queryForm.value = {
+    startDate: '2026-08-10',
+    endDate: '2026-08-10',
+    cmpStartDate: '2025-08-10',
+    cmpEndDate: '2025-08-10',
+    orgCode: '1101001'
+  }
+  deptGroupFilter.value = ''
+  apiData.value = null
+  apiError.value = ''
+}
+
+// ========== 写死数据（后面逐步替换） ==========
 const rawData = [
   // 生鲜一部
   { orgName: '菏泽佳和城店超市', deptGroup: '生鲜一部', deptCode: '1101', deptName: '蔬菜组',
@@ -109,30 +161,54 @@ const rawData = [
 ]
 
 // ========== 辅助函数 ==========
-// 求和
 function sum(rows, field) {
   return rows.reduce((s, r) => s + (Number(r[field]) || 0), 0)
 }
-
-// 根据当期值和增长率反推同期基值：prior = current / (1 + rate/100)
 function priorValue(current, rate) {
   if (rate == null) return current
   return current / (1 + rate / 100)
 }
-
-// 增长率 = (当期 - 同期) / |同期| × 100
 function calcRate(curSum, priorSum) {
   if (!priorSum || priorSum === 0) return 0
   return Number((((curSum - priorSum) / Math.abs(priorSum)) * 100).toFixed(2))
 }
 
+// ========== 合并数据源：API 返回后，按位置依次覆盖 4 列 ==========
+// 按部门编码前2位推导部组名称（确保 tableData 的分组过滤不受 API 机构名称影响）
+function getDeptGroup(code) {
+  if (!code) return ''
+  const prefix = String(code).substring(0, 2)
+  const map = { '11': '生鲜一部', '12': '生鲜二部', '13': '食品部', '15': '非食部' }
+  return map[prefix] || ''
+}
+
+const sourceData = computed(() => {
+  const api = apiData.value
+  if (!api || !api.length) return rawData
+  return rawData.map((row, i) => {
+    const ar = api[i]
+    if (!ar) return row
+    return {
+      ...row,
+      // API字段映射到前端列：机构名称→机构名称，部门编码3→部门编码，部门名称3→部门名称
+      // 部组名称由部门编码前缀推导（不受API字段影响，否则所有行部组相同）
+      orgName: ar['机构名称'] ?? row.orgName,
+      deptGroup: getDeptGroup(ar['部门编码3']) || row.deptGroup,
+      deptCode: ar['部门编码3'] ?? row.deptCode,
+      deptName: ar['部门名称3'] ?? row.deptName,
+    }
+  })
+})
+
 // ========== 构建表格数据（含小计和总计） ==========
 const tableData = computed(() => {
   const groups = ['生鲜一部', '生鲜二部', '食品部', '非食部']
+  const data = sourceData.value
   const result = []
 
   for (const g of groups) {
-    const rows = rawData.filter(r => r.deptGroup === g)
+    const rows = data.filter(r => r.deptGroup === g)
+    if (!rows.length) continue
     result.push(...rows)
 
     // ── 本期合计 ──
@@ -163,8 +239,6 @@ const tableData = computed(() => {
     const profitMoM   = calcRate(curProfit, priorMoM.profit)
     const customerYoY = calcRate(curCustomers, priorYoY.customers)
     const customerMoM = calcRate(curCustomers, priorMoM.customers)
-
-    // 客单价同比/环比：通过同期销售总额 / 同期来客总数推导
     const priorAvgPriceYoY = priorYoY.customers > 0 ? (priorYoY.sales / priorYoY.customers) : 0
     const priorAvgPriceMoM = priorMoM.customers > 0 ? (priorMoM.sales / priorMoM.customers) : 0
     const avgPriceYoY = priorAvgPriceYoY > 0 ? calcRate(avgPrice, priorAvgPriceYoY) : 0
@@ -206,7 +280,6 @@ const tableData = computed(() => {
   const tProfitMoM   = calcRate(tProfit, tPriorMoM.profit)
   const tCustomerYoY = calcRate(tCustomers, tPriorYoY.customers)
   const tCustomerMoM = calcRate(tCustomers, tPriorMoM.customers)
-
   const tPriorAvgPriceYoY = tPriorYoY.customers > 0 ? (tPriorYoY.sales / tPriorYoY.customers) : 0
   const tPriorAvgPriceMoM = tPriorMoM.customers > 0 ? (tPriorMoM.sales / tPriorMoM.customers) : 0
   const tAvgPriceYoY = tPriorAvgPriceYoY > 0 ? calcRate(tAvgPrice, tPriorAvgPriceYoY) : 0
@@ -224,22 +297,16 @@ const tableData = computed(() => {
   return result
 })
 
-// ========== 查询表单（纯展示） ==========
-const orgName = ref('菏泽佳和城店超市')
-const deptGroup = ref('')
-
 // ========== 格式化 ==========
 function formatAmount(n) {
   if (n === undefined || n === null) return ''
   return n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
-
 function formatRate(val) {
   if (val === undefined || val === null) return '-'
   const prefix = val > 0 ? '+' : ''
   return prefix + Number(val).toFixed(2) + '%'
 }
-
 function getRateClass(val) {
   if (val === undefined || val === null) return ''
   if (val > 0) return 'rate-up'
@@ -306,9 +373,10 @@ function exportExcel() {
   <div class="sales-detail-page">
     <!-- 标题区域 -->
     <div class="page-header">
-      <h2>部门销售详情（演示数据）</h2>
+      <h2>部门销售详情</h2>
       <div class="date-info">
-        <span class="tag current">查询日期：2026-08-10</span>
+        <span class="tag current">查询日期：{{ queryForm.startDate }} ~ {{ queryForm.endDate }}</span>
+        <span v-if="apiData" class="tag loaded">已加载 {{ apiData.length }} 条API数据</span>
       </div>
       <div class="toggle-row">
         <label class="toggle-item">
@@ -324,14 +392,28 @@ function exportExcel() {
     <div class="query-panel">
       <div class="query-row">
         <div class="query-item">
-          <label>机构名称:</label>
-          <select v-model="orgName">
-            <option>菏泽佳和城店超市</option>
-          </select>
+          <label>开始日期:</label>
+          <input type="date" v-model="queryForm.startDate" />
+        </div>
+        <div class="query-item">
+          <label>结束日期:</label>
+          <input type="date" v-model="queryForm.endDate" />
+        </div>
+        <div class="query-item">
+          <label>同比开始:</label>
+          <input type="date" v-model="queryForm.cmpStartDate" />
+        </div>
+        <div class="query-item">
+          <label>同比结束:</label>
+          <input type="date" v-model="queryForm.cmpEndDate" />
+        </div>
+        <div class="query-item">
+          <label>机构编码:</label>
+          <input type="text" v-model="queryForm.orgCode" placeholder="如 1101001" style="width:100px" />
         </div>
         <div class="query-item">
           <label>部组名称:</label>
-          <select v-model="deptGroup">
+          <select v-model="deptGroupFilter">
             <option value="">全部</option>
             <option>生鲜一部</option>
             <option>生鲜二部</option>
@@ -340,8 +422,10 @@ function exportExcel() {
           </select>
         </div>
         <div class="query-actions">
-          <button class="btn-primary" @click="() => {}">查询</button>
-          <button class="btn-default" @click="() => {}">重置</button>
+          <button class="btn-primary" @click="fetchData" :disabled="apiLoading">
+            {{ apiLoading ? '查询中...' : '查询' }}
+          </button>
+          <button class="btn-default" @click="resetForm">重置</button>
           <button class="btn-export" @click="exportExcel">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -352,6 +436,7 @@ function exportExcel() {
           </button>
         </div>
       </div>
+      <div class="query-error" v-if="apiError">{{ apiError }}</div>
     </div>
 
     <!-- 表格 -->
@@ -481,6 +566,10 @@ function exportExcel() {
   background: #e3f2fd;
   color: #1565c0;
 }
+.tag.loaded {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
 .toggle-row {
   display: flex;
   justify-content: center;
@@ -508,7 +597,7 @@ function exportExcel() {
 }
 .query-row {
   display: flex;
-  gap: 16px;
+  gap: 12px;
   align-items: center;
   flex-wrap: wrap;
 }
@@ -522,19 +611,31 @@ function exportExcel() {
   color: #555;
   font-size: 13px;
 }
-.query-item select {
-  padding: 5px 10px;
+.query-item select,
+.query-item input[type="date"],
+.query-item input[type="text"] {
+  padding: 5px 8px;
   border: 1px solid #d9d9d9;
   border-radius: 4px;
   font-size: 13px;
   outline: none;
   background: #fff;
-  min-width: 160px;
+}
+.query-item input[type="date"] {
+  width: 130px;
+}
+.query-item select {
+  min-width: 120px;
 }
 .query-actions {
   display: flex;
   gap: 8px;
   margin-left: auto;
+}
+.query-error {
+  color: #d32f2f;
+  font-size: 12px;
+  margin-top: 6px;
 }
 .btn-primary {
   background: #1890ff;
@@ -547,6 +648,7 @@ function exportExcel() {
   transition: background .2s;
 }
 .btn-primary:hover { background: #40a9ff; }
+.btn-primary:disabled { background: #91caff; cursor: not-allowed; }
 .btn-default {
   background: #fff;
   color: #555;
@@ -636,16 +738,6 @@ function exportExcel() {
   border-bottom: 2px solid #f57f17 !important;
   color: #4e342e !important;
 }
-/* 小计行：所有列强制居中（覆盖 .col-num 的 right 对齐） */
-.sales-table tbody tr.subtotal td.col-merge,
-.sales-table tbody tr.subtotal td.col-num,
-.sales-table tbody tr.subtotal td.col-rate,
-.sales-table tbody tr.subtotal td.col-sales,
-.sales-table tbody tr.subtotal td.col-profit,
-.sales-table tbody tr.subtotal td.col-customer,
-.sales-table tbody tr.subtotal td.col-price {
-  text-align: center !important;
-}
 .subtotal:hover {
   background: linear-gradient(90deg, #fff176 0%, #fff59d 100%) !important;
 }
@@ -660,16 +752,6 @@ function exportExcel() {
   border-top: 2px solid #e65100 !important;
   border-bottom: 3px double #bf360c !important;
   color: #3e2723 !important;
-}
-/* 总计行：所有列强制居中（覆盖 .col-num 的 right 对齐） */
-.sales-table tbody tr.total td.col-merge,
-.sales-table tbody tr.total td.col-num,
-.sales-table tbody tr.total td.col-rate,
-.sales-table tbody tr.total td.col-sales,
-.sales-table tbody tr.total td.col-profit,
-.sales-table tbody tr.total td.col-customer,
-.sales-table tbody tr.total td.col-price {
-  text-align: center !important;
 }
 .total:hover {
   background: linear-gradient(90deg, #ffc107 0%, #ffb300 100%) !important;
