@@ -108,12 +108,22 @@ const rawData = [
     avgPrice: 3719, avgPriceYoY: 0.68, avgPriceMoM: -0.61 },
 ]
 
-// ========== 添加标记 ==========
-rawData.forEach(r => { r.isDetail = true })
-
-// ========== 计算小计/总计 ==========
+// ========== 辅助函数 ==========
+// 求和
 function sum(rows, field) {
-  return rows.reduce((s, r) => s + (r[field] || 0), 0)
+  return rows.reduce((s, r) => s + (Number(r[field]) || 0), 0)
+}
+
+// 根据当期值和增长率反推同期基值：prior = current / (1 + rate/100)
+function priorValue(current, rate) {
+  if (rate == null) return current
+  return current / (1 + rate / 100)
+}
+
+// 增长率 = (当期 - 同期) / |同期| × 100
+function calcRate(curSum, priorSum) {
+  if (!priorSum || priorSum === 0) return 0
+  return Number((((curSum - priorSum) / Math.abs(priorSum)) * 100).toFixed(2))
 }
 
 // ========== 构建表格数据（含小计和总计） ==========
@@ -125,37 +135,89 @@ const tableData = computed(() => {
     const rows = rawData.filter(r => r.deptGroup === g)
     result.push(...rows)
 
-    // 小计行
-    const salesAmount = sum(rows, 'salesAmount')
-    const profitAmount = sum(rows, 'profitAmount')
-    const customers = sum(rows, 'customers')
-    const profitRate = salesAmount > 0 ? Number(((profitAmount / salesAmount) * 100).toFixed(2)) : 0
-    const avgPrice = customers > 0 ? Math.round(salesAmount / customers) : 0
+    // ── 本期合计 ──
+    const curSales = sum(rows, 'salesAmount')
+    const curProfit = sum(rows, 'profitAmount')
+    const curCustomers = sum(rows, 'customers')
+
+    // ── 反推同期基值并汇总 ──
+    const priorYoY = { sales: 0, profit: 0, customers: 0 }
+    const priorMoM = { sales: 0, profit: 0, customers: 0 }
+    for (const r of rows) {
+      priorYoY.sales    += priorValue(r.salesAmount, r.salesYoY)
+      priorYoY.profit   += priorValue(r.profitAmount, r.profitYoY)
+      priorYoY.customers += priorValue(r.customers, r.customerYoY)
+      priorMoM.sales    += priorValue(r.salesAmount, r.salesMoM)
+      priorMoM.profit   += priorValue(r.profitAmount, r.profitMoM)
+      priorMoM.customers += priorValue(r.customers, r.customerMoM)
+    }
+
+    // ── 派生指标 ──
+    const profitRate = curSales > 0 ? Number(((curProfit / curSales) * 100).toFixed(2)) : 0
+    const avgPrice = curCustomers > 0 ? Math.round(curSales / curCustomers) : 0
+
+    // ── 同比/环比增长率 ──
+    const salesYoY    = calcRate(curSales, priorYoY.sales)
+    const salesMoM    = calcRate(curSales, priorMoM.sales)
+    const profitYoY   = calcRate(curProfit, priorYoY.profit)
+    const profitMoM   = calcRate(curProfit, priorMoM.profit)
+    const customerYoY = calcRate(curCustomers, priorYoY.customers)
+    const customerMoM = calcRate(curCustomers, priorMoM.customers)
+
+    // 客单价同比/环比：通过同期销售总额 / 同期来客总数推导
+    const priorAvgPriceYoY = priorYoY.customers > 0 ? (priorYoY.sales / priorYoY.customers) : 0
+    const priorAvgPriceMoM = priorMoM.customers > 0 ? (priorMoM.sales / priorMoM.customers) : 0
+    const avgPriceYoY = priorAvgPriceYoY > 0 ? calcRate(avgPrice, priorAvgPriceYoY) : 0
+    const avgPriceMoM = priorAvgPriceMoM > 0 ? calcRate(avgPrice, priorAvgPriceMoM) : 0
 
     result.push({
       orgName: '', deptGroup: '', deptCode: '', deptName: `${g} 合计`,
-      salesAmount, salesYoY: null, salesMoM: null,
-      profitAmount, profitYoY: null, profitMoM: null,
-      profitRate, customers, customerYoY: null, customerMoM: null,
-      avgPrice, avgPriceYoY: null, avgPriceMoM: null,
+      salesAmount: curSales, salesYoY, salesMoM,
+      profitAmount: curProfit, profitYoY, profitMoM,
+      profitRate, customers: curCustomers, customerYoY, customerMoM,
+      avgPrice, avgPriceYoY, avgPriceMoM,
       isSubtotal: true
     })
   }
 
-  // 总计行
-  const allRows = result.filter(r => !r.isSubtotal)
-  const tSales = sum(allRows, 'salesAmount')
-  const tProfit = sum(allRows, 'profitAmount')
-  const tCustomers = sum(allRows, 'customers')
+  // ── 总计行（取明细行汇总，不含小计行） ──
+  const allDetail = result.filter(r => !r.isSubtotal)
+  const tSales = sum(allDetail, 'salesAmount')
+  const tProfit = sum(allDetail, 'profitAmount')
+  const tCustomers = sum(allDetail, 'customers')
+
+  const tPriorYoY = { sales: 0, profit: 0, customers: 0 }
+  const tPriorMoM = { sales: 0, profit: 0, customers: 0 }
+  for (const r of allDetail) {
+    tPriorYoY.sales    += priorValue(r.salesAmount, r.salesYoY)
+    tPriorYoY.profit   += priorValue(r.profitAmount, r.profitYoY)
+    tPriorYoY.customers += priorValue(r.customers, r.customerYoY)
+    tPriorMoM.sales    += priorValue(r.salesAmount, r.salesMoM)
+    tPriorMoM.profit   += priorValue(r.profitAmount, r.profitMoM)
+    tPriorMoM.customers += priorValue(r.customers, r.customerMoM)
+  }
+
   const tProfitRate = tSales > 0 ? Number(((tProfit / tSales) * 100).toFixed(2)) : 0
   const tAvgPrice = tCustomers > 0 ? Math.round(tSales / tCustomers) : 0
 
+  const tSalesYoY    = calcRate(tSales, tPriorYoY.sales)
+  const tSalesMoM    = calcRate(tSales, tPriorMoM.sales)
+  const tProfitYoY   = calcRate(tProfit, tPriorYoY.profit)
+  const tProfitMoM   = calcRate(tProfit, tPriorMoM.profit)
+  const tCustomerYoY = calcRate(tCustomers, tPriorYoY.customers)
+  const tCustomerMoM = calcRate(tCustomers, tPriorMoM.customers)
+
+  const tPriorAvgPriceYoY = tPriorYoY.customers > 0 ? (tPriorYoY.sales / tPriorYoY.customers) : 0
+  const tPriorAvgPriceMoM = tPriorMoM.customers > 0 ? (tPriorMoM.sales / tPriorMoM.customers) : 0
+  const tAvgPriceYoY = tPriorAvgPriceYoY > 0 ? calcRate(tAvgPrice, tPriorAvgPriceYoY) : 0
+  const tAvgPriceMoM = tPriorAvgPriceMoM > 0 ? calcRate(tAvgPrice, tPriorAvgPriceMoM) : 0
+
   result.push({
     orgName: '', deptGroup: '', deptCode: '', deptName: '超市总计',
-    salesAmount: tSales, salesYoY: null, salesMoM: null,
-    profitAmount: tProfit, profitYoY: null, profitMoM: null,
-    profitRate: tProfitRate, customers: tCustomers, customerYoY: null, customerMoM: null,
-    avgPrice: tAvgPrice, avgPriceYoY: null, avgPriceMoM: null,
+    salesAmount: tSales, salesYoY: tSalesYoY, salesMoM: tSalesMoM,
+    profitAmount: tProfit, profitYoY: tProfitYoY, profitMoM: tProfitMoM,
+    profitRate: tProfitRate, customers: tCustomers, customerYoY: tCustomerYoY, customerMoM: tCustomerMoM,
+    avgPrice: tAvgPrice, avgPriceYoY: tAvgPriceYoY, avgPriceMoM: tAvgPriceMoM,
     isTotal: true
   })
 
@@ -318,38 +380,39 @@ function exportExcel() {
         </thead>
         <tbody>
           <template v-for="(row, idx) in tableData" :key="idx">
-            <!-- 合计行（小计/总计）：四列合并 -->
+            <!-- 小计行 -->
             <tr v-if="row.isSubtotal" class="subtotal">
               <td colspan="4" class="col-merge subtotal-label">{{ row.deptName }}</td>
               <td class="col-num col-sales">{{ formatAmount(row.salesAmount) }}</td>
-              <td class="col-rate col-sales" v-if="showYoY">-</td>
-              <td class="col-rate col-sales" v-if="showMoM">-</td>
+              <td :class="['col-rate', 'col-sales', getRateClass(row.salesYoY)]" v-if="showYoY">{{ formatRate(row.salesYoY) }}</td>
+              <td :class="['col-rate', 'col-sales', getRateClass(row.salesMoM)]" v-if="showMoM">{{ formatRate(row.salesMoM) }}</td>
               <td class="col-num col-profit">{{ formatAmount(row.profitAmount) }}</td>
-              <td class="col-rate col-profit" v-if="showYoY">-</td>
-              <td class="col-rate col-profit" v-if="showMoM">-</td>
+              <td :class="['col-rate', 'col-profit', getRateClass(row.profitYoY)]" v-if="showYoY">{{ formatRate(row.profitYoY) }}</td>
+              <td :class="['col-rate', 'col-profit', getRateClass(row.profitMoM)]" v-if="showMoM">{{ formatRate(row.profitMoM) }}</td>
               <td class="col-num col-profit">{{ row.profitRate }}%</td>
               <td class="col-num col-customer">{{ formatAmount(row.customers) }}</td>
-              <td class="col-rate col-customer" v-if="showYoY">-</td>
-              <td class="col-rate col-customer" v-if="showMoM">-</td>
+              <td :class="['col-rate', 'col-customer', getRateClass(row.customerYoY)]" v-if="showYoY">{{ formatRate(row.customerYoY) }}</td>
+              <td :class="['col-rate', 'col-customer', getRateClass(row.customerMoM)]" v-if="showMoM">{{ formatRate(row.customerMoM) }}</td>
               <td class="col-num col-price">{{ formatAmount(row.avgPrice) }}</td>
-              <td class="col-rate col-price" v-if="showYoY">-</td>
-              <td class="col-rate col-price" v-if="showMoM">-</td>
+              <td :class="['col-rate', 'col-price', getRateClass(row.avgPriceYoY)]" v-if="showYoY">{{ formatRate(row.avgPriceYoY) }}</td>
+              <td :class="['col-rate', 'col-price', getRateClass(row.avgPriceMoM)]" v-if="showMoM">{{ formatRate(row.avgPriceMoM) }}</td>
             </tr>
+            <!-- 总计行 -->
             <tr v-else-if="row.isTotal" class="total">
               <td colspan="4" class="col-merge total-label">{{ row.deptName }}</td>
               <td class="col-num col-sales">{{ formatAmount(row.salesAmount) }}</td>
-              <td class="col-rate col-sales" v-if="showYoY">-</td>
-              <td class="col-rate col-sales" v-if="showMoM">-</td>
+              <td :class="['col-rate', 'col-sales', getRateClass(row.salesYoY)]" v-if="showYoY">{{ formatRate(row.salesYoY) }}</td>
+              <td :class="['col-rate', 'col-sales', getRateClass(row.salesMoM)]" v-if="showMoM">{{ formatRate(row.salesMoM) }}</td>
               <td class="col-num col-profit">{{ formatAmount(row.profitAmount) }}</td>
-              <td class="col-rate col-profit" v-if="showYoY">-</td>
-              <td class="col-rate col-profit" v-if="showMoM">-</td>
+              <td :class="['col-rate', 'col-profit', getRateClass(row.profitYoY)]" v-if="showYoY">{{ formatRate(row.profitYoY) }}</td>
+              <td :class="['col-rate', 'col-profit', getRateClass(row.profitMoM)]" v-if="showMoM">{{ formatRate(row.profitMoM) }}</td>
               <td class="col-num col-profit">{{ row.profitRate }}%</td>
               <td class="col-num col-customer">{{ formatAmount(row.customers) }}</td>
-              <td class="col-rate col-customer" v-if="showYoY">-</td>
-              <td class="col-rate col-customer" v-if="showMoM">-</td>
+              <td :class="['col-rate', 'col-customer', getRateClass(row.customerYoY)]" v-if="showYoY">{{ formatRate(row.customerYoY) }}</td>
+              <td :class="['col-rate', 'col-customer', getRateClass(row.customerMoM)]" v-if="showMoM">{{ formatRate(row.customerMoM) }}</td>
               <td class="col-num col-price">{{ formatAmount(row.avgPrice) }}</td>
-              <td class="col-rate col-price" v-if="showYoY">-</td>
-              <td class="col-rate col-price" v-if="showMoM">-</td>
+              <td :class="['col-rate', 'col-price', getRateClass(row.avgPriceYoY)]" v-if="showYoY">{{ formatRate(row.avgPriceYoY) }}</td>
+              <td :class="['col-rate', 'col-price', getRateClass(row.avgPriceMoM)]" v-if="showMoM">{{ formatRate(row.avgPriceMoM) }}</td>
             </tr>
             <!-- 明细行 -->
             <tr v-else :class="{ 'odd': idx % 2 === 1 }">
@@ -554,7 +617,7 @@ function exportExcel() {
 .col-code { min-width: 70px; }
 .col-name { min-width: 100px; text-align: left !important; padding-left: 10px !important; }
 .col-merge { text-align: center !important; font-weight: 700; font-size: 14px; letter-spacing: 2px; }
-.col-num { min-width: 85px; text-align: right !important; font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif; }
+.col-num { min-width: 85px; text-align: center !important; font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif; }
 .col-rate { min-width: 70px; }
 
 /* 列分组颜色 */
@@ -572,6 +635,15 @@ function exportExcel() {
   border-top: 2px solid #f57f17 !important;
   border-bottom: 2px solid #f57f17 !important;
   color: #4e342e !important;
+}
+/* 小计行：所有列强制居中（覆盖 .col-num 的 right 对齐） */
+.sales-table tbody tr.subtotal td.col-merge,
+.sales-table tbody tr.subtotal td.col-num,
+.sales-table tbody tr.subtotal td.col-rate,
+.sales-table tbody tr.subtotal td.col-sales,
+.sales-table tbody tr.subtotal td.col-profit,
+.sales-table tbody tr.subtotal td.col-customer,
+.sales-table tbody tr.subtotal td.col-price {
   text-align: center !important;
 }
 .subtotal:hover {
@@ -588,6 +660,15 @@ function exportExcel() {
   border-top: 2px solid #e65100 !important;
   border-bottom: 3px double #bf360c !important;
   color: #3e2723 !important;
+}
+/* 总计行：所有列强制居中（覆盖 .col-num 的 right 对齐） */
+.sales-table tbody tr.total td.col-merge,
+.sales-table tbody tr.total td.col-num,
+.sales-table tbody tr.total td.col-rate,
+.sales-table tbody tr.total td.col-sales,
+.sales-table tbody tr.total td.col-profit,
+.sales-table tbody tr.total td.col-customer,
+.sales-table tbody tr.total td.col-price {
   text-align: center !important;
 }
 .total:hover {
