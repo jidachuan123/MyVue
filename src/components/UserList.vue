@@ -1,7 +1,7 @@
 <script setup>
 import { ref, reactive, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import axios from 'axios'
+import request from '../utils/request'
 
 const router = useRouter()
 
@@ -13,7 +13,7 @@ const ccodes = ref([])
 
 const query = reactive({
   page: 1,
-  size: 20,
+  size: 5,
   keyword: '',
   ccode: ''
 })
@@ -40,12 +40,12 @@ async function fetchGoods() {
     if (query.keyword) params.keyword = query.keyword
     if (query.ccode) params.ccode = query.ccode
 
-    const res = await axios.get('/api/consumer/user/list', { params })
-    console.log('fetchGoods response:', res.data)
-    goodsList.value = res.data.result || []
-    total.value = res.data.total || 0
+    const data = await request.get('/consumer/user/list', params)
+    console.log('fetchGoods response:', data)
+    goodsList.value = data.result || []
+    total.value = data.total || 0
   } catch (e) {
-    error.value = '无法连接后端服务，请确认 Spring Cloud 服务已启动。'
+    error.value = e.message || '无法连接后端服务'
     console.error(e)
   } finally {
     loading.value = false
@@ -54,9 +54,9 @@ async function fetchGoods() {
 
 async function fetchCcodes() {
   try {
-    const res = await axios.get('/api/consumer/user/ccodes')
-    console.log('fetchCcodes response:', res.data)
-    ccodes.value = res.data.result || []
+    const data = await request.get('/consumer/user/ccodes')
+    console.log('fetchCcodes response:', data)
+    ccodes.value = data.result || []
   } catch (e) { /* ignore */ }
 }
 

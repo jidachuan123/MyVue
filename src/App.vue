@@ -1,6 +1,7 @@
 <script setup>
 import { ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import request from './utils/request'
 
 const route = useRoute()
 const router = useRouter()
@@ -11,7 +12,7 @@ watch(() => route.path, (newPath) => {
 })
 
 const logout = () => {
-  localStorage.removeItem('isLogin')
+  request.removeToken()
   router.push('/login')
 }
 </script>

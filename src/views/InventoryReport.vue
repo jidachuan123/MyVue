@@ -1,5 +1,6 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
+import request from '../utils/request'
 
 const loading = ref(false)
 const dataList = ref([])
@@ -37,22 +38,20 @@ const checkResultOptions = [
 async function fetchReport() {
   loading.value = true
   try {
-    const params = new URLSearchParams()
-    if (queryForm.orgCode) params.append('orgCode', queryForm.orgCode)
-    if (queryForm.warehouse) params.append('warehouse', queryForm.warehouse)
-    if (queryForm.department) params.append('department', queryForm.department)
-    if (queryForm.docNo) params.append('docNo', queryForm.docNo)
-    if (queryForm.docStatus) params.append('docStatus', queryForm.docStatus)
-    if (queryForm.tenantId) params.append('tenantId', queryForm.tenantId)
-    if (queryForm.lang) params.append('lang', queryForm.lang)
-    if (queryForm.location) params.append('location', queryForm.location)
-    if (queryForm.checkResult) params.append('checkResult', queryForm.checkResult)
-    if (queryForm.startDate) params.append('startDate', queryForm.startDate)
-    if (queryForm.endDate) params.append('endDate', queryForm.endDate)
+    const params = {}
+    if (queryForm.orgCode) params.orgCode = queryForm.orgCode
+    if (queryForm.warehouse) params.warehouse = queryForm.warehouse
+    if (queryForm.department) params.department = queryForm.department
+    if (queryForm.docNo) params.docNo = queryForm.docNo
+    if (queryForm.docStatus) params.docStatus = queryForm.docStatus
+    if (queryForm.tenantId) params.tenantId = queryForm.tenantId
+    if (queryForm.lang) params.lang = queryForm.lang
+    if (queryForm.location) params.location = queryForm.location
+    if (queryForm.checkResult) params.checkResult = queryForm.checkResult
+    if (queryForm.startDate) params.startDate = queryForm.startDate
+    if (queryForm.endDate) params.endDate = queryForm.endDate
 
-    const res = await fetch(`/report/provider/report/inventory?${params.toString()}`)
-    if (!res.ok) throw new Error('查询失败: ' + res.status)
-    dataList.value = await res.json()
+    dataList.value = await request.get('/consumer/report/inventory', params)
 
     const status = queryForm.docStatus ? `单据状态: ${queryForm.docStatus}` : '单据状态: 全部'
     totalInfo.value = `[${status}][开始时间: ${queryForm.startDate}][结束时间: ${queryForm.endDate}]`

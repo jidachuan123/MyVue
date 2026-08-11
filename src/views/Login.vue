@@ -1,6 +1,7 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import request from '../utils/request'
 
 const router = useRouter()
 const username = ref('')
@@ -10,7 +11,7 @@ const loading = ref(false)
 const errorMsg = ref('')
 const successMsg = ref('')
 
-const handleLogin = () => {
+const handleLogin = async () => {
   errorMsg.value = ''
   successMsg.value = ''
 
@@ -22,27 +23,33 @@ const handleLogin = () => {
     errorMsg.value = '请输入密码'
     return
   }
-  if (password.value.length < 6) {
-    errorMsg.value = '密码长度至少 6 位'
-    return
-  }
 
   loading.value = true
 
-  // 模拟登录请求（纯前端演示，不调用后端）
-  setTimeout(() => {
-    loading.value = false
-    // 模拟账号验证：admin / 123456
-    if (username.value === 'admin' && password.value === '123456') {
-      successMsg.value = '登录成功，正在跳转...'
+  try {
+    const res = await request.post('/consumer/auth/login', {
+      username: username.value,
+      password: password.value
+    })
+
+    if (res.code === 0 && res.result) {
+      request.setToken(res.result.token)
       localStorage.setItem('isLogin', 'true')
+      localStorage.setItem('username', res.result.username || '')
+      localStorage.setItem('realName', res.result.realName || '')
+
+      successMsg.value = '登录成功，正在跳转...'
       setTimeout(() => {
         router.push('/home')
       }, 800)
     } else {
-      errorMsg.value = '用户名或密码错误（试试 admin / 123456）'
+      errorMsg.value = res.msg || '登录失败'
     }
-  }, 1200)
+  } catch (e) {
+    errorMsg.value = e.message || '网络错误，请检查后端服务是否启动'
+  } finally {
+    loading.value = false
+  }
 }
 
 const goBack = () => {

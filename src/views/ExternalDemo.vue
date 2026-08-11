@@ -1,6 +1,6 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import axios from 'axios'
+import request from '../utils/request'
 
 const goodsList = ref([])
 const loading = ref(false)
@@ -23,12 +23,12 @@ async function fetchExternalGoods() {
     if (query.goodsCode) params.goodsCode = query.goodsCode
     if (query.goodsName) params.goodsName = query.goodsName
 
-    const res = await axios.get('/api/consumer/external/demo/goods/query', { params })
-    console.log('External Demo response:', res.data)
-    apiResult.value = res.data
-    goodsList.value = res.data.result || []
+    const data = await request.get('/consumer/external/demo/goods/query', params)
+    console.log('External Demo response:', data)
+    apiResult.value = data
+    goodsList.value = data.result || []
   } catch (e) {
-    error.value = '调用失败，请确认 Provider 和 Consumer 服务已启动。'
+    error.value = e.message || '调用失败'
     console.error(e)
   } finally {
     loading.value = false
