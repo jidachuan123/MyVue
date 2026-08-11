@@ -6,8 +6,15 @@ export default defineConfig({
   server: {
     port: 3001,
     proxy: {
-      '/api': {
+      // Consumer 请求 → 8002（登录、用户等）
+      '/api/consumer': {
         target: 'http://localhost:8002',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, '')
+      },
+      // Provider 请求 → 8001（报表、数据等）
+      '/api/provider': {
+        target: 'http://localhost:8001',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, '')
       }
