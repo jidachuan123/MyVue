@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import request from '../utils/request'
 
 // ========== 同比/环比列显隐开关 ==========
@@ -57,108 +57,10 @@ function resetForm() {
   apiError.value = ''
 }
 
-// ========== 写死数据（后面逐步替换） ==========
-const rawData = [
-  // 生鲜一部
-  { orgName: '菏泽佳和城店超市', deptGroup: '生鲜一部', deptCode: '1101', deptName: '蔬菜组',
-    salesAmount: 26626.26, salesYoY: 12.35, salesMoM: -3.21,
-    profitAmount: 5876.50, profitYoY: 18.22, profitMoM: 2.15,
-    profitRate: 22.07, customers: 8450, customerYoY: 8.50, customerMoM: -1.80,
-    avgPrice: 3151, avgPriceYoY: 3.55, avgPriceMoM: -1.44 },
-  { orgName: '菏泽佳和城店超市', deptGroup: '生鲜一部', deptCode: '1102', deptName: '水果组',
-    salesAmount: 65663.37, salesYoY: 15.80, salesMoM: 5.62,
-    profitAmount: 14102.80, profitYoY: 21.50, profitMoM: 8.30,
-    profitRate: 21.48, customers: 12100, customerYoY: 10.20, customerMoM: 4.15,
-    avgPrice: 5427, avgPriceYoY: 5.08, avgPriceMoM: 1.41 },
-  { orgName: '菏泽佳和城店超市', deptGroup: '生鲜一部', deptCode: '1103', deptName: '肉品组',
-    salesAmount: 89210.55, salesYoY: 8.90, salesMoM: -1.50,
-    profitAmount: 19876.20, profitYoY: 11.30, profitMoM: 1.20,
-    profitRate: 22.28, customers: 15240, customerYoY: 6.80, customerMoM: -2.10,
-    avgPrice: 5854, avgPriceYoY: 1.97, avgPriceMoM: 0.61 },
-  { orgName: '菏泽佳和城店超市', deptGroup: '生鲜一部', deptCode: '1104', deptName: '水产组',
-    salesAmount: 32150.88, salesYoY: 6.45, salesMoM: -4.80,
-    profitAmount: 7120.35, profitYoY: 9.10, profitMoM: -2.50,
-    profitRate: 22.15, customers: 6320, customerYoY: 4.30, customerMoM: -3.50,
-    avgPrice: 5087, avgPriceYoY: 2.06, avgPriceMoM: -1.35 },
-  { orgName: '菏泽佳和城店超市', deptGroup: '生鲜一部', deptCode: '1105', deptName: '熟食组',
-    salesAmount: 45870.20, salesYoY: 14.20, salesMoM: 3.80,
-    profitAmount: 13520.60, profitYoY: 17.80, profitMoM: 5.20,
-    profitRate: 29.48, customers: 9840, customerYoY: 11.50, customerMoM: 2.50,
-    avgPrice: 4662, avgPriceYoY: 2.42, avgPriceMoM: 1.27 },
-  { orgName: '菏泽佳和城店超市', deptGroup: '生鲜一部', deptCode: '1106', deptName: '烘焙组',
-    salesAmount: 38120.45, salesYoY: 22.50, salesMoM: 8.60,
-    profitAmount: 15230.80, profitYoY: 25.60, profitMoM: 10.20,
-    profitRate: 39.95, customers: 7650, customerYoY: 18.30, customerMoM: 6.50,
-    avgPrice: 4983, avgPriceYoY: 3.55, avgPriceMoM: 1.97 },
-  // 生鲜二部
-  { orgName: '菏泽佳和城店超市', deptGroup: '生鲜二部', deptCode: '1201', deptName: '乳品组',
-    salesAmount: 52340.66, salesYoY: 10.80, salesMoM: 2.15,
-    profitAmount: 10468.13, profitYoY: 12.50, profitMoM: 3.20,
-    profitRate: 20.00, customers: 10230, customerYoY: 8.40, customerMoM: 1.80,
-    avgPrice: 5116, avgPriceYoY: 2.22, avgPriceMoM: 0.34 },
-  { orgName: '菏泽佳和城店超市', deptGroup: '生鲜二部', deptCode: '1202', deptName: '冷冻组',
-    salesAmount: 28760.30, salesYoY: 5.60, salesMoM: -2.30,
-    profitAmount: 6850.50, profitYoY: 7.80, profitMoM: -1.10,
-    profitRate: 23.82, customers: 5890, customerYoY: 3.50, customerMoM: -1.60,
-    avgPrice: 4883, avgPriceYoY: 2.03, avgPriceMoM: -0.71 },
-  { orgName: '菏泽佳和城店超市', deptGroup: '生鲜二部', deptCode: '1203', deptName: '蛋品组',
-    salesAmount: 19850.40, salesYoY: 8.20, salesMoM: 1.05,
-    profitAmount: 3952.20, profitYoY: 10.30, profitMoM: 2.50,
-    profitRate: 19.91, customers: 6720, customerYoY: 6.10, customerMoM: 0.80,
-    avgPrice: 2954, avgPriceYoY: 1.98, avgPriceMoM: 0.25 },
-  { orgName: '菏泽佳和城店超市', deptGroup: '生鲜二部', deptCode: '1204', deptName: '豆制品组',
-    salesAmount: 15620.88, salesYoY: 7.10, salesMoM: -0.85,
-    profitAmount: 3580.40, profitYoY: 8.90, profitMoM: -0.50,
-    profitRate: 22.92, customers: 5340, customerYoY: 5.20, customerMoM: -0.30,
-    avgPrice: 2925, avgPriceYoY: 1.81, avgPriceMoM: -0.55 },
-  // 食品部
-  { orgName: '菏泽佳和城店超市', deptGroup: '食品部', deptCode: '1301', deptName: '休闲食品组',
-    salesAmount: 35680.50, salesYoY: 9.50, salesMoM: 3.20,
-    profitAmount: 8920.13, profitYoY: 11.20, profitMoM: 4.50,
-    profitRate: 25.00, customers: 8960, customerYoY: 7.30, customerMoM: 2.50,
-    avgPrice: 3982, avgPriceYoY: 2.05, avgPriceMoM: 0.68 },
-  { orgName: '菏泽佳和城店超市', deptGroup: '食品部', deptCode: '1302', deptName: '酒饮组',
-    salesAmount: 48230.75, salesYoY: 13.60, salesMoM: 5.10,
-    profitAmount: 14469.23, profitYoY: 15.80, profitMoM: 6.20,
-    profitRate: 30.00, customers: 7840, customerYoY: 10.50, customerMoM: 4.20,
-    avgPrice: 6152, avgPriceYoY: 2.81, avgPriceMoM: 0.86 },
-  { orgName: '菏泽佳和城店超市', deptGroup: '食品部', deptCode: '1303', deptName: '调味品组',
-    salesAmount: 29850.20, salesYoY: 6.80, salesMoM: 1.50,
-    profitAmount: 7172.05, profitYoY: 8.50, profitMoM: 2.10,
-    profitRate: 24.03, customers: 7650, customerYoY: 5.40, customerMoM: 1.20,
-    avgPrice: 3902, avgPriceYoY: 1.33, avgPriceMoM: 0.30 },
-  { orgName: '菏泽佳和城店超市', deptGroup: '食品部', deptCode: '1304', deptName: '粮油组',
-    salesAmount: 41230.60, salesYoY: 4.20, salesMoM: 0.80,
-    profitAmount: 5438.25, profitYoY: 3.50, profitMoM: -1.10,
-    profitRate: 13.19, customers: 6230, customerYoY: 2.80, customerMoM: 0.30,
-    avgPrice: 6618, avgPriceYoY: 1.36, avgPriceMoM: 0.50 },
-  { orgName: '菏泽佳和城店超市', deptGroup: '食品部', deptCode: '1305', deptName: '冲调组',
-    salesAmount: 22340.30, salesYoY: 11.30, salesMoM: 3.80,
-    profitAmount: 5585.08, profitYoY: 12.40, profitMoM: 4.50,
-    profitRate: 25.00, customers: 5840, customerYoY: 8.60, customerMoM: 2.80,
-    avgPrice: 3825, avgPriceYoY: 2.49, avgPriceMoM: 0.97 },
-  { orgName: '菏泽佳和城店超市', deptGroup: '食品部', deptCode: '1306', deptName: '进口食品组',
-    salesAmount: 18760.45, salesYoY: 25.60, salesMoM: 8.90,
-    profitAmount: 6570.16, profitYoY: 28.50, profitMoM: 10.50,
-    profitRate: 35.02, customers: 4120, customerYoY: 22.30, customerMoM: 7.50,
-    avgPrice: 4553, avgPriceYoY: 2.70, avgPriceMoM: 1.30 },
-  // 非食部
-  { orgName: '菏泽佳和城店超市', deptGroup: '非食部', deptCode: '1501', deptName: '日用品组',
-    salesAmount: 35890.60, salesYoY: 5.80, salesMoM: -2.10,
-    profitAmount: 10767.18, profitYoY: 6.50, profitMoM: -1.50,
-    profitRate: 30.00, customers: 6780, customerYoY: 4.20, customerMoM: -1.80,
-    avgPrice: 5294, avgPriceYoY: 1.54, avgPriceMoM: -0.31 },
-  { orgName: '菏泽佳和城店超市', deptGroup: '非食部', deptCode: '1502', deptName: '家纺组',
-    salesAmount: 22840.20, salesYoY: -1.20, salesMoM: -5.30,
-    profitAmount: 6852.06, profitYoY: -2.50, profitMoM: -6.10,
-    profitRate: 30.00, customers: 3250, customerYoY: -3.10, customerMoM: -4.50,
-    avgPrice: 7028, avgPriceYoY: 1.96, avgPriceMoM: -0.84 },
-  { orgName: '菏泽佳和城店超市', deptGroup: '非食部', deptCode: '1503', deptName: '文体组',
-    salesAmount: 15320.80, salesYoY: 3.50, salesMoM: -1.80,
-    profitAmount: 4596.24, profitYoY: 4.20, profitMoM: -0.90,
-    profitRate: 30.00, customers: 4120, customerYoY: 2.80, customerMoM: -1.20,
-    avgPrice: 3719, avgPriceYoY: 0.68, avgPriceMoM: -0.61 },
-]
+// 页面进入时自动加载一次（直接展示后端真实数据，不再有写死数据兜底）
+onMounted(fetchData)
+
+// ========== 数据来源：仅使用后端 API 返回的数据（不再有写死数据） ==========
 
 // ========== 辅助函数 ==========
 function sum(rows, field) {
@@ -172,9 +74,33 @@ function calcRate(curSum, priorSum) {
   if (!priorSum || priorSum === 0) return 0
   return Number((((curSum - priorSum) / Math.abs(priorSum)) * 100).toFixed(2))
 }
+// 判断行集合中某字段是否至少有一个非空值（用于小计/总计同比的空白判定）
+function hasAny(rows, field) {
+  return rows.some(r => r[field] !== null && r[field] !== undefined)
+}
 
-// ========== 合并数据源：API 返回后，按位置依次覆盖 4 列 ==========
-// 按部门编码前2位推导部组名称（确保 tableData 的分组过滤不受 API 机构名称影响）
+// ========== 数值辅助 ==========
+// 转数字，空值/非数字 → null
+function num(v) {
+  if (v === null || v === undefined || v === '') return null
+  const n = Number(v)
+  return isNaN(n) ? null : n
+}
+// 百分比数值保留两位小数
+function pct2(v) {
+  const n = num(v)
+  return n === null ? null : Math.round(n * 100) / 100
+}
+// 环比增长率 = (本期 - 对期) ÷ 对期 × 100
+function momRate(cur, prior) {
+  const c = num(cur)
+  const p = num(prior)
+  if (c === null || p === null) return null
+  return calcRate(c, p)
+}
+
+// ========== 合并数据源：API 返回后覆盖 机构/部门 与 数值列 ==========
+// 按部门编码前2位推导部组名称；未知前缀返回空字符串，tableData 中该行不展示（如 91xx 包装耗材）
 function getDeptGroup(code) {
   if (!code) return ''
   const prefix = String(code).substring(0, 2)
@@ -184,27 +110,40 @@ function getDeptGroup(code) {
 
 const sourceData = computed(() => {
   const api = apiData.value
-  if (!api || !api.length) return rawData
-  return rawData.map((row, i) => {
-    const ar = api[i]
-    if (!ar) return row
+  // 后端未返回数据时，表格为空（不显示任何写死数据）
+  if (!api || !api.length) return []
+  // 后端返回几条，前端就加载几条；字段为空 → null → 显示空白
+  return api.map((ar) => {
+    const deptCode = ar['部门编码3'] ?? null
     return {
-      ...row,
-      // API字段映射到前端列：机构名称→机构名称，部门编码3→部门编码，部门名称3→部门名称
-      // 部组名称由部门编码前缀推导（不受API字段影响，否则所有行部组相同）
-      orgName: ar['机构名称'] ?? row.orgName,
-      deptGroup: getDeptGroup(ar['部门编码3']) || row.deptGroup,
-      deptCode: ar['部门编码3'] ?? row.deptCode,
-      deptName: ar['部门名称3'] ?? row.deptName,
+      // 机构/部门列
+      orgName: ar['机构名称'] ?? null,
+      deptGroup: getDeptGroup(deptCode),
+      deptCode,
+      deptName: ar['部门名称3'] ?? null,
+      // 数值列：取后端返回字段，为空 → null → 显示空白
+      salesAmount: num(ar['销售金额']),
+      salesMoM: momRate(ar['销售金额'], ar['对期销售金额']),   // (销售金额-对期销售金额)/对期销售金额
+      profitAmount: num(ar['含税毛利']),
+      profitMoM: momRate(ar['含税毛利'], ar['对期含税毛利']),   // (含税毛利-对期含税毛利)/对期含税毛利
+      profitRate: pct2(ar['毛利率']),                          // 毛利率
+      customers: num(ar['交易笔数']),
+      customerMoM: momRate(ar['交易笔数'], ar['对期交易笔数']), // (交易笔数-对期交易笔数)/对期交易笔数
+      avgPrice: num(ar['客单价']),
+      avgPriceMoM: momRate(ar['客单价'], ar['对期客单价']),     // (客单价-对期客单价)/对期客单价
+      // 同比（YoY）：后端未映射对应字段 → 保持 null → 显示空白
+      salesYoY: null, profitYoY: null, customerYoY: null, avgPriceYoY: null,
     }
   })
 })
 
 // ========== 构建表格数据（含小计和总计） ==========
 const tableData = computed(() => {
-  const groups = ['生鲜一部', '生鲜二部', '食品部', '非食部']
   const data = sourceData.value
   const result = []
+
+  // 固定 4 个部组顺序；无法归组的行（部门编码前缀未知，如 91xx 包装耗材）不展示
+  const groups = ['生鲜一部', '生鲜二部', '食品部', '非食部']
 
   for (const g of groups) {
     const rows = data.filter(r => r.deptGroup === g)
@@ -233,15 +172,16 @@ const tableData = computed(() => {
     const avgPrice = curCustomers > 0 ? Math.round(curSales / curCustomers) : 0
 
     // ── 同比/环比增长率 ──
-    const salesYoY    = calcRate(curSales, priorYoY.sales)
+    // 同比：若组内明细行同比字段全为空（后端未映射），小计同比显示空白
+    const salesYoY    = hasAny(rows, 'salesYoY') ? calcRate(curSales, priorYoY.sales) : null
     const salesMoM    = calcRate(curSales, priorMoM.sales)
-    const profitYoY   = calcRate(curProfit, priorYoY.profit)
+    const profitYoY   = hasAny(rows, 'profitYoY') ? calcRate(curProfit, priorYoY.profit) : null
     const profitMoM   = calcRate(curProfit, priorMoM.profit)
-    const customerYoY = calcRate(curCustomers, priorYoY.customers)
+    const customerYoY = hasAny(rows, 'customerYoY') ? calcRate(curCustomers, priorYoY.customers) : null
     const customerMoM = calcRate(curCustomers, priorMoM.customers)
     const priorAvgPriceYoY = priorYoY.customers > 0 ? (priorYoY.sales / priorYoY.customers) : 0
     const priorAvgPriceMoM = priorMoM.customers > 0 ? (priorMoM.sales / priorMoM.customers) : 0
-    const avgPriceYoY = priorAvgPriceYoY > 0 ? calcRate(avgPrice, priorAvgPriceYoY) : 0
+    const avgPriceYoY = hasAny(rows, 'avgPriceYoY') && priorAvgPriceYoY > 0 ? calcRate(avgPrice, priorAvgPriceYoY) : null
     const avgPriceMoM = priorAvgPriceMoM > 0 ? calcRate(avgPrice, priorAvgPriceMoM) : 0
 
     result.push({
@@ -274,15 +214,15 @@ const tableData = computed(() => {
   const tProfitRate = tSales > 0 ? Number(((tProfit / tSales) * 100).toFixed(2)) : 0
   const tAvgPrice = tCustomers > 0 ? Math.round(tSales / tCustomers) : 0
 
-  const tSalesYoY    = calcRate(tSales, tPriorYoY.sales)
+  const tSalesYoY    = hasAny(allDetail, 'salesYoY') ? calcRate(tSales, tPriorYoY.sales) : null
   const tSalesMoM    = calcRate(tSales, tPriorMoM.sales)
-  const tProfitYoY   = calcRate(tProfit, tPriorYoY.profit)
+  const tProfitYoY   = hasAny(allDetail, 'profitYoY') ? calcRate(tProfit, tPriorYoY.profit) : null
   const tProfitMoM   = calcRate(tProfit, tPriorMoM.profit)
-  const tCustomerYoY = calcRate(tCustomers, tPriorYoY.customers)
+  const tCustomerYoY = hasAny(allDetail, 'customerYoY') ? calcRate(tCustomers, tPriorYoY.customers) : null
   const tCustomerMoM = calcRate(tCustomers, tPriorMoM.customers)
   const tPriorAvgPriceYoY = tPriorYoY.customers > 0 ? (tPriorYoY.sales / tPriorYoY.customers) : 0
   const tPriorAvgPriceMoM = tPriorMoM.customers > 0 ? (tPriorMoM.sales / tPriorMoM.customers) : 0
-  const tAvgPriceYoY = tPriorAvgPriceYoY > 0 ? calcRate(tAvgPrice, tPriorAvgPriceYoY) : 0
+  const tAvgPriceYoY = hasAny(allDetail, 'avgPriceYoY') && tPriorAvgPriceYoY > 0 ? calcRate(tAvgPrice, tPriorAvgPriceYoY) : null
   const tAvgPriceMoM = tPriorAvgPriceMoM > 0 ? calcRate(tAvgPrice, tPriorAvgPriceMoM) : 0
 
   result.push({
@@ -297,15 +237,24 @@ const tableData = computed(() => {
   return result
 })
 
+// ========== 实际展示的明细条数（不含小计/总计；包装耗材等未归组行被过滤后不计入） ==========
+const loadedCount = computed(() =>
+  tableData.value.filter(r => !r.isSubtotal && !r.isTotal).length
+)
+
 // ========== 格式化 ==========
 function formatAmount(n) {
   if (n === undefined || n === null) return ''
   return n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 function formatRate(val) {
-  if (val === undefined || val === null) return '-'
+  if (val === undefined || val === null) return ''
   const prefix = val > 0 ? '+' : ''
   return prefix + Number(val).toFixed(2) + '%'
+}
+function formatPct(val) {
+  if (val === undefined || val === null) return ''
+  return val + '%'
 }
 function getRateClass(val) {
   if (val === undefined || val === null) return ''
@@ -344,7 +293,7 @@ function exportExcel() {
     values.push(row.profitAmount)
     if (showYoY.value) values.push(formatRate(row.profitYoY))
     if (showMoM.value) values.push(formatRate(row.profitMoM))
-    values.push(row.profitRate + '%', row.customers)
+    values.push(formatPct(row.profitRate), row.customers)
     if (showYoY.value) values.push(formatRate(row.customerYoY))
     if (showMoM.value) values.push(formatRate(row.customerMoM))
     values.push(row.avgPrice)
@@ -376,7 +325,7 @@ function exportExcel() {
       <h2>部门销售详情</h2>
       <div class="date-info">
         <span class="tag current">查询日期：{{ queryForm.startDate }} ~ {{ queryForm.endDate }}</span>
-        <span v-if="apiData" class="tag loaded">已加载 {{ apiData.length }} 条API数据</span>
+        <span v-if="apiData" class="tag loaded">已加载 {{ loadedCount }} 条API数据</span>
       </div>
       <div class="toggle-row">
         <label class="toggle-item">
@@ -400,11 +349,11 @@ function exportExcel() {
           <input type="date" v-model="queryForm.endDate" />
         </div>
         <div class="query-item">
-          <label>同比开始:</label>
+          <label>对比开始:</label>
           <input type="date" v-model="queryForm.cmpStartDate" />
         </div>
         <div class="query-item">
-          <label>同比结束:</label>
+          <label>对比结束:</label>
           <input type="date" v-model="queryForm.cmpEndDate" />
         </div>
         <div class="query-item">
@@ -474,7 +423,7 @@ function exportExcel() {
               <td class="col-num col-profit">{{ formatAmount(row.profitAmount) }}</td>
               <td :class="['col-rate', 'col-profit', getRateClass(row.profitYoY)]" v-if="showYoY">{{ formatRate(row.profitYoY) }}</td>
               <td :class="['col-rate', 'col-profit', getRateClass(row.profitMoM)]" v-if="showMoM">{{ formatRate(row.profitMoM) }}</td>
-              <td class="col-num col-profit">{{ row.profitRate }}%</td>
+              <td class="col-num col-profit">{{ formatPct(row.profitRate) }}</td>
               <td class="col-num col-customer">{{ formatAmount(row.customers) }}</td>
               <td :class="['col-rate', 'col-customer', getRateClass(row.customerYoY)]" v-if="showYoY">{{ formatRate(row.customerYoY) }}</td>
               <td :class="['col-rate', 'col-customer', getRateClass(row.customerMoM)]" v-if="showMoM">{{ formatRate(row.customerMoM) }}</td>
@@ -491,7 +440,7 @@ function exportExcel() {
               <td class="col-num col-profit">{{ formatAmount(row.profitAmount) }}</td>
               <td :class="['col-rate', 'col-profit', getRateClass(row.profitYoY)]" v-if="showYoY">{{ formatRate(row.profitYoY) }}</td>
               <td :class="['col-rate', 'col-profit', getRateClass(row.profitMoM)]" v-if="showMoM">{{ formatRate(row.profitMoM) }}</td>
-              <td class="col-num col-profit">{{ row.profitRate }}%</td>
+              <td class="col-num col-profit">{{ formatPct(row.profitRate) }}</td>
               <td class="col-num col-customer">{{ formatAmount(row.customers) }}</td>
               <td :class="['col-rate', 'col-customer', getRateClass(row.customerYoY)]" v-if="showYoY">{{ formatRate(row.customerYoY) }}</td>
               <td :class="['col-rate', 'col-customer', getRateClass(row.customerMoM)]" v-if="showMoM">{{ formatRate(row.customerMoM) }}</td>
@@ -511,7 +460,7 @@ function exportExcel() {
               <td class="col-num col-profit">{{ formatAmount(row.profitAmount) }}</td>
               <td :class="['col-rate', 'col-profit', getRateClass(row.profitYoY)]" v-if="showYoY">{{ formatRate(row.profitYoY) }}</td>
               <td :class="['col-rate', 'col-profit', getRateClass(row.profitMoM)]" v-if="showMoM">{{ formatRate(row.profitMoM) }}</td>
-              <td class="col-num col-profit">{{ row.profitRate }}%</td>
+              <td class="col-num col-profit">{{ formatPct(row.profitRate) }}</td>
               <td class="col-num col-customer">{{ formatAmount(row.customers) }}</td>
               <td :class="['col-rate', 'col-customer', getRateClass(row.customerYoY)]" v-if="showYoY">{{ formatRate(row.customerYoY) }}</td>
               <td :class="['col-rate', 'col-customer', getRateClass(row.customerMoM)]" v-if="showMoM">{{ formatRate(row.customerMoM) }}</td>
