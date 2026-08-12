@@ -48,8 +48,8 @@ function resetForm() {
   queryForm.value = {
     startDate: '2026-08-10',
     endDate: '2026-08-10',
-    cmpStartDate: '2025-08-10',
-    cmpEndDate: '2025-08-10',
+    cmpStartDate: '2026-08-11',
+    cmpEndDate: '2026-08-11',
     orgCode: '1101001'
   }
   deptGroupFilter.value = ''
