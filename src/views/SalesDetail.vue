@@ -1,10 +1,15 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import request from '../utils/request'
 
 // ========== 同比/环比列显隐开关 ==========
 const showYoY = ref(true)
 const showMoM = ref(true)
+
+// ========== 合计取值模式 ==========
+// 'sum'  累加合计：小计/总计由前端把明细行(deptLevels=3)累加计算
+// 'dept' 部门合计：小计取 deptLevels=2 接口行，总计取 deptLevels=1 接口行（去掉行政部）
+const totalMode = ref('sum')
 
 // ========== 查询参数（用户输入，不写死） ==========
 const queryForm = ref({
@@ -20,25 +25,39 @@ const deptGroupFilter = ref('')
 const apiData = ref(null)
 const apiLoading = ref(false)
 const apiError = ref('')
+// 部门合计模式下的额外数据：deptLevels=2（部门合计行）、deptLevels=1（超市总计行）
+const deptSummary = ref(null)
+const storeTotal = ref(null)
 
 async function fetchData() {
   apiLoading.value = true
   apiError.value = ''
   try {
-    const res = await request.get('/provider/sales/detail', {
+    const common = {
       tenantId: '8',
       startDate: queryForm.value.startDate,
       endDate: queryForm.value.endDate,
       cmpStartDate: queryForm.value.cmpStartDate,
       cmpEndDate: queryForm.value.cmpEndDate,
       orgCode: queryForm.value.orgCode,
-      deptLevels: '3',
       showStore: '显示门店'
-    })
-    apiData.value = res
+    }
+    const isDeptMode = totalMode.value === 'dept'
+    // 明细(deptLevels=3)总是查询；部门合计模式下并行查询 deptLevels=2/1 用于合计与总计
+    const [detail, lv2, lv1] = await Promise.all([
+      request.get('/provider/sales/detail', { ...common, deptLevels: '3' }),
+      isDeptMode ? request.get('/provider/sales/detail', { ...common, deptLevels: '2' }) : Promise.resolve(null),
+      isDeptMode ? request.get('/provider/sales/detail', { ...common, deptLevels: '1' }) : Promise.resolve(null)
+    ])
+    apiData.value = detail
+    // 去掉部门为"行政部"的条（用户要求）
+    deptSummary.value = isDeptMode && lv2 ? lv2.filter(r => r['部门名称2'] !== '行政部') : null
+    storeTotal.value = isDeptMode && lv1 ? lv1.filter(r => r['部门名称1'] !== '行政部') : null
   } catch (e) {
     apiError.value = '数据加载失败: ' + (e.message || '未知错误')
     apiData.value = null
+    deptSummary.value = null
+    storeTotal.value = null
   } finally {
     apiLoading.value = false
   }
@@ -54,11 +73,16 @@ function resetForm() {
   }
   deptGroupFilter.value = ''
   apiData.value = null
+  deptSummary.value = null
+  storeTotal.value = null
   apiError.value = ''
 }
 
 // 页面进入时自动加载一次（直接展示后端真实数据，不再有写死数据兜底）
 onMounted(fetchData)
+
+// 切换合计取值模式时自动重新查询（部门合计模式会额外查 deptLevels=2/1）
+watch(totalMode, () => { fetchData() })
 
 // ========== 数据来源：仅使用后端 API 返回的数据（不再有写死数据） ==========
 
@@ -123,11 +147,13 @@ const sourceData = computed(() => {
       deptName: ar['部门名称3'] ?? null,
       // 数值列：取后端返回字段，为空 → null → 显示空白
       salesAmount: num(ar['销售金额']),
-      salesMoM: momRate(ar['销售金额'], ar['对期销售金额']),   // (销售金额-对期销售金额)/对期销售金额
+      // 后端已算好增长率字段（SQL 中 DBC*100，即 (本期-对期)/对期），前端直接渲染
+      salesMoM: pct2(ar['销售额增长率']),
       profitAmount: num(ar['含税毛利']),
-      profitMoM: momRate(ar['含税毛利'], ar['对期含税毛利']),   // (含税毛利-对期含税毛利)/对期含税毛利
+      profitMoM: pct2(ar['毛利额增长率']),
       profitRate: pct2(ar['毛利率']),                          // 毛利率
       customers: num(ar['交易笔数']),
+      // 后端无来客数/客单价增长率字段，用返回的本期/对期字段"相减再除"
       customerMoM: momRate(ar['交易笔数'], ar['对期交易笔数']), // (交易笔数-对期交易笔数)/对期交易笔数
       avgPrice: num(ar['客单价']),
       avgPriceMoM: momRate(ar['客单价'], ar['对期客单价']),     // (客单价-对期客单价)/对期客单价
@@ -138,71 +164,87 @@ const sourceData = computed(() => {
 })
 
 // ========== 构建表格数据（含小计和总计） ==========
-const tableData = computed(() => {
-  const data = sourceData.value
-  const result = []
 
-  // 固定 4 个部组顺序；无法归组的行（部门编码前缀未知，如 91xx 包装耗材）不展示
-  const groups = ['生鲜一部', '生鲜二部', '食品部', '非食部']
+// 部门合计模式：从接口返回行构建合计/总计行，前端只负责"按名字放入"
+// 后端已算好：销售额增长率/毛利额增长率（即 (本期-对期)/对期），前端直接渲染；
+// 来客数/客单价环比后端无现成字段，用返回的本期/对期字段"相减再除"。
+function buildRowFromApi(ar, deptName, isSubtotal, isTotal) {
+  return {
+    orgName: '', deptGroup: '', deptCode: '',
+    deptName,
+    salesAmount: num(ar['销售金额']),
+    salesYoY: null,
+    salesMoM: pct2(ar['销售额增长率']),        // 销售金额的合计 + 环比增长率
+    profitAmount: num(ar['含税毛利']),
+    profitYoY: null,
+    profitMoM: pct2(ar['毛利额增长率']),        // 含税毛利的合计 + 环比增长率
+    profitRate: pct2(ar['毛利率']),            // 毛利率
+    customers: num(ar['交易笔数']),            // 交易笔数就是来客数的合计
+    customerYoY: null,
+    customerMoM: momRate(ar['交易笔数'], ar['对期交易笔数']), // 对期交易笔数→环比来客数增长率
+    avgPrice: num(ar['客单价']),
+    avgPriceYoY: null,
+    avgPriceMoM: momRate(ar['客单价'], ar['对期客单价']),     // (客单价-对期客单价)/对期客单价
+    isSubtotal: !!isSubtotal,
+    isTotal: !!isTotal
+  }
+}
 
-  for (const g of groups) {
-    const rows = data.filter(r => r.deptGroup === g)
-    if (!rows.length) continue
-    result.push(...rows)
+// 累加合计模式：由明细行累加计算小计
+function buildSubtotalBySum(rows, g) {
+  // ── 本期合计 ──
+  const curSales = sum(rows, 'salesAmount')
+  const curProfit = sum(rows, 'profitAmount')
+  const curCustomers = sum(rows, 'customers')
 
-    // ── 本期合计 ──
-    const curSales = sum(rows, 'salesAmount')
-    const curProfit = sum(rows, 'profitAmount')
-    const curCustomers = sum(rows, 'customers')
-
-    // ── 反推同期基值并汇总 ──
-    const priorYoY = { sales: 0, profit: 0, customers: 0 }
-    const priorMoM = { sales: 0, profit: 0, customers: 0 }
-    for (const r of rows) {
-      priorYoY.sales    += priorValue(r.salesAmount, r.salesYoY)
-      priorYoY.profit   += priorValue(r.profitAmount, r.profitYoY)
-      priorYoY.customers += priorValue(r.customers, r.customerYoY)
-      priorMoM.sales    += priorValue(r.salesAmount, r.salesMoM)
-      priorMoM.profit   += priorValue(r.profitAmount, r.profitMoM)
-      priorMoM.customers += priorValue(r.customers, r.customerMoM)
-    }
-
-    // ── 派生指标 ──
-    const profitRate = curSales > 0 ? Number(((curProfit / curSales) * 100).toFixed(2)) : 0
-    const avgPrice = curCustomers > 0 ? Math.round(curSales / curCustomers) : 0
-
-    // ── 同比/环比增长率 ──
-    // 同比：若组内明细行同比字段全为空（后端未映射），小计同比显示空白
-    const salesYoY    = hasAny(rows, 'salesYoY') ? calcRate(curSales, priorYoY.sales) : null
-    const salesMoM    = calcRate(curSales, priorMoM.sales)
-    const profitYoY   = hasAny(rows, 'profitYoY') ? calcRate(curProfit, priorYoY.profit) : null
-    const profitMoM   = calcRate(curProfit, priorMoM.profit)
-    const customerYoY = hasAny(rows, 'customerYoY') ? calcRate(curCustomers, priorYoY.customers) : null
-    const customerMoM = calcRate(curCustomers, priorMoM.customers)
-    const priorAvgPriceYoY = priorYoY.customers > 0 ? (priorYoY.sales / priorYoY.customers) : 0
-    const priorAvgPriceMoM = priorMoM.customers > 0 ? (priorMoM.sales / priorMoM.customers) : 0
-    const avgPriceYoY = hasAny(rows, 'avgPriceYoY') && priorAvgPriceYoY > 0 ? calcRate(avgPrice, priorAvgPriceYoY) : null
-    const avgPriceMoM = priorAvgPriceMoM > 0 ? calcRate(avgPrice, priorAvgPriceMoM) : 0
-
-    result.push({
-      orgName: '', deptGroup: '', deptCode: '', deptName: `${g} 合计`,
-      salesAmount: curSales, salesYoY, salesMoM,
-      profitAmount: curProfit, profitYoY, profitMoM,
-      profitRate, customers: curCustomers, customerYoY, customerMoM,
-      avgPrice, avgPriceYoY, avgPriceMoM,
-      isSubtotal: true
-    })
+  // ── 反推同期基值并汇总 ──
+  const priorYoY = { sales: 0, profit: 0, customers: 0 }
+  const priorMoM = { sales: 0, profit: 0, customers: 0 }
+  for (const r of rows) {
+    priorYoY.sales    += priorValue(r.salesAmount, r.salesYoY)
+    priorYoY.profit   += priorValue(r.profitAmount, r.profitYoY)
+    priorYoY.customers += priorValue(r.customers, r.customerYoY)
+    priorMoM.sales    += priorValue(r.salesAmount, r.salesMoM)
+    priorMoM.profit   += priorValue(r.profitAmount, r.profitMoM)
+    priorMoM.customers += priorValue(r.customers, r.customerMoM)
   }
 
-  // ── 总计行（取明细行汇总，不含小计行） ──
-  const allDetail = result.filter(r => !r.isSubtotal)
-  const tSales = sum(allDetail, 'salesAmount')
-  const tProfit = sum(allDetail, 'profitAmount')
-  const tCustomers = sum(allDetail, 'customers')
+  // ── 派生指标 ──
+  const profitRate = curSales > 0 ? Number(((curProfit / curSales) * 100).toFixed(2)) : 0
+  const avgPrice = curCustomers > 0 ? Math.round(curSales / curCustomers) : 0
+
+  // ── 同比/环比增长率 ──
+  // 同比：若组内明细行同比字段全为空（后端未映射），小计同比显示空白
+  const salesYoY    = hasAny(rows, 'salesYoY') ? calcRate(curSales, priorYoY.sales) : null
+  const salesMoM    = calcRate(curSales, priorMoM.sales)
+  const profitYoY   = hasAny(rows, 'profitYoY') ? calcRate(curProfit, priorYoY.profit) : null
+  const profitMoM   = calcRate(curProfit, priorMoM.profit)
+  const customerYoY = hasAny(rows, 'customerYoY') ? calcRate(curCustomers, priorYoY.customers) : null
+  const customerMoM = calcRate(curCustomers, priorMoM.customers)
+  const priorAvgPriceYoY = priorYoY.customers > 0 ? (priorYoY.sales / priorYoY.customers) : 0
+  const priorAvgPriceMoM = priorMoM.customers > 0 ? (priorMoM.sales / priorMoM.customers) : 0
+  const avgPriceYoY = hasAny(rows, 'avgPriceYoY') && priorAvgPriceYoY > 0 ? calcRate(avgPrice, priorAvgPriceYoY) : null
+  const avgPriceMoM = priorAvgPriceMoM > 0 ? calcRate(avgPrice, priorAvgPriceMoM) : 0
+
+  return {
+    orgName: '', deptGroup: '', deptCode: '', deptName: `${g} 合计`,
+    salesAmount: curSales, salesYoY, salesMoM,
+    profitAmount: curProfit, profitYoY, profitMoM,
+    profitRate, customers: curCustomers, customerYoY, customerMoM,
+    avgPrice, avgPriceYoY, avgPriceMoM,
+    isSubtotal: true
+  }
+}
+
+// 累加合计模式：由明细行累加计算总计
+function buildTotalBySum(detailRows) {
+  const tSales = sum(detailRows, 'salesAmount')
+  const tProfit = sum(detailRows, 'profitAmount')
+  const tCustomers = sum(detailRows, 'customers')
 
   const tPriorYoY = { sales: 0, profit: 0, customers: 0 }
   const tPriorMoM = { sales: 0, profit: 0, customers: 0 }
-  for (const r of allDetail) {
+  for (const r of detailRows) {
     tPriorYoY.sales    += priorValue(r.salesAmount, r.salesYoY)
     tPriorYoY.profit   += priorValue(r.profitAmount, r.profitYoY)
     tPriorYoY.customers += priorValue(r.customers, r.customerYoY)
@@ -214,25 +256,64 @@ const tableData = computed(() => {
   const tProfitRate = tSales > 0 ? Number(((tProfit / tSales) * 100).toFixed(2)) : 0
   const tAvgPrice = tCustomers > 0 ? Math.round(tSales / tCustomers) : 0
 
-  const tSalesYoY    = hasAny(allDetail, 'salesYoY') ? calcRate(tSales, tPriorYoY.sales) : null
+  const tSalesYoY    = hasAny(detailRows, 'salesYoY') ? calcRate(tSales, tPriorYoY.sales) : null
   const tSalesMoM    = calcRate(tSales, tPriorMoM.sales)
-  const tProfitYoY   = hasAny(allDetail, 'profitYoY') ? calcRate(tProfit, tPriorYoY.profit) : null
+  const tProfitYoY   = hasAny(detailRows, 'profitYoY') ? calcRate(tProfit, tPriorYoY.profit) : null
   const tProfitMoM   = calcRate(tProfit, tPriorMoM.profit)
-  const tCustomerYoY = hasAny(allDetail, 'customerYoY') ? calcRate(tCustomers, tPriorYoY.customers) : null
+  const tCustomerYoY = hasAny(detailRows, 'customerYoY') ? calcRate(tCustomers, tPriorYoY.customers) : null
   const tCustomerMoM = calcRate(tCustomers, tPriorMoM.customers)
   const tPriorAvgPriceYoY = tPriorYoY.customers > 0 ? (tPriorYoY.sales / tPriorYoY.customers) : 0
   const tPriorAvgPriceMoM = tPriorMoM.customers > 0 ? (tPriorMoM.sales / tPriorMoM.customers) : 0
-  const tAvgPriceYoY = hasAny(allDetail, 'avgPriceYoY') && tPriorAvgPriceYoY > 0 ? calcRate(tAvgPrice, tPriorAvgPriceYoY) : null
+  const tAvgPriceYoY = hasAny(detailRows, 'avgPriceYoY') && tPriorAvgPriceYoY > 0 ? calcRate(tAvgPrice, tPriorAvgPriceYoY) : null
   const tAvgPriceMoM = tPriorAvgPriceMoM > 0 ? calcRate(tAvgPrice, tPriorAvgPriceMoM) : 0
 
-  result.push({
+  return {
     orgName: '', deptGroup: '', deptCode: '', deptName: '超市总计',
     salesAmount: tSales, salesYoY: tSalesYoY, salesMoM: tSalesMoM,
     profitAmount: tProfit, profitYoY: tProfitYoY, profitMoM: tProfitMoM,
     profitRate: tProfitRate, customers: tCustomers, customerYoY: tCustomerYoY, customerMoM: tCustomerMoM,
     avgPrice: tAvgPrice, avgPriceYoY: tAvgPriceYoY, avgPriceMoM: tAvgPriceMoM,
     isTotal: true
-  })
+  }
+}
+
+const tableData = computed(() => {
+  const data = sourceData.value
+  const result = []
+
+  // 固定 4 个部组顺序；无法归组的行（部门编码前缀未知，如 91xx 包装耗材）不展示
+  const groups = ['生鲜一部', '生鲜二部', '食品部', '非食部']
+  const deptMode = totalMode.value === 'dept'
+
+  for (const g of groups) {
+    const rows = data.filter(r => r.deptGroup === g)
+    if (!rows.length) continue
+    result.push(...rows)
+
+    let subtotal
+    if (deptMode) {
+      // 部门合计：取 deptLevels=2 接口中同名部门行（行政部已过滤）；找不到则回退累加
+      const src = (deptSummary.value || []).find(r => r['部门名称2'] === g)
+      subtotal = src ? buildRowFromApi(src, `${g} 合计`, true, false)
+                     : buildSubtotalBySum(rows, g)
+    } else {
+      subtotal = buildSubtotalBySum(rows, g)
+    }
+    result.push(subtotal)
+  }
+
+  // ── 总计行 ──
+  const allDetail = result.filter(r => !r.isSubtotal)
+  let total
+  if (deptMode) {
+    // 部门合计：取 deptLevels=1 接口中"超市"行（行政部已过滤）；找不到则回退累加
+    const src = (storeTotal.value || []).find(r => r['部门名称1'] === '超市') || (storeTotal.value || [])[0]
+    total = src ? buildRowFromApi(src, '超市总计', false, true)
+                : buildTotalBySum(allDetail)
+  } else {
+    total = buildTotalBySum(allDetail)
+  }
+  result.push(total)
 
   return result
 })
@@ -334,6 +415,11 @@ function exportExcel() {
         <label class="toggle-item">
           <input type="checkbox" v-model="showMoM" /> 显示环比
         </label>
+        <span class="toggle-item toggle-mode">
+          合计取值：
+          <label class="mode-radio"><input type="radio" value="sum" v-model="totalMode" /> 累加合计</label>
+          <label class="mode-radio"><input type="radio" value="dept" v-model="totalMode" /> 部门合计</label>
+        </span>
       </div>
     </div>
 
@@ -349,11 +435,11 @@ function exportExcel() {
           <input type="date" v-model="queryForm.endDate" />
         </div>
         <div class="query-item">
-          <label>对比开始:</label>
+          <label>环比开始:</label>
           <input type="date" v-model="queryForm.cmpStartDate" />
         </div>
         <div class="query-item">
-          <label>对比结束:</label>
+          <label>环比结束:</label>
           <input type="date" v-model="queryForm.cmpEndDate" />
         </div>
         <div class="query-item">
@@ -536,6 +622,18 @@ function exportExcel() {
 }
 .toggle-item input {
   cursor: pointer;
+}
+.toggle-mode {
+  gap: 8px;
+  color: #333;
+  font-weight: 500;
+}
+.mode-radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: #555;
+  font-weight: 400;
 }
 
 /* 查询 */
