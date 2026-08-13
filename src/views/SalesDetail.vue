@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import request from '../utils/request'
 
 // ========== 同比/环比列显隐开关 ==========
@@ -7,16 +7,19 @@ const showYoY = ref(true)
 const showMoM = ref(true)
 
 // ========== 合计取值模式 ==========
-// 'sum'  累加合计：小计/总计由前端把明细行(deptLevels=3)累加计算
-// 'dept' 部门合计：小计取 deptLevels=2 接口行，总计取 deptLevels=1 接口行（去掉行政部）
-const totalMode = ref('sum')
+// 固定使用「部门合计」：小计取 deptLevels=2 接口行，总计取 deptLevels=1 接口行（去掉行政部）
+// （已隐藏「累加合计」，不再提供切换）
 
 // ========== 查询参数（用户输入，不写死） ==========
+// cmpStartDate/cmpEndDate = 环比对比日期；yoyStartDate/yoyEndDate = 同比对比日期
+// 两者作用完全一样：都作为接口的 cmpStartDate/cmpEndDate（SQL 对比日期）传参
 const queryForm = ref({
   startDate: '2026-08-10',
   endDate: '2026-08-10',
   cmpStartDate: '2026-08-11',
   cmpEndDate: '2026-08-11',
+  yoyStartDate: '2026-08-11',
+  yoyEndDate: '2026-08-11',
   orgCode: '1101001'
 })
 const deptGroupFilter = ref('')
@@ -25,39 +28,53 @@ const deptGroupFilter = ref('')
 const apiData = ref(null)
 const apiLoading = ref(false)
 const apiError = ref('')
+// 同比数据：用 同比开始/同比结束 作为 cmpStartDate/cmpEndDate 再查一遍同一接口
+// 只取其中的 同比销售额增长率/同比毛利额增长率/同比来客数增长率 三列渲染，其余舍弃
+const apiDataYoY = ref(null)
 // 部门合计模式下的额外数据：deptLevels=2（部门合计行）、deptLevels=1（超市总计行）
 const deptSummary = ref(null)
 const storeTotal = ref(null)
+const deptSummaryYoY = ref(null)
+const storeTotalYoY = ref(null)
 
 async function fetchData() {
   apiLoading.value = true
   apiError.value = ''
   try {
-    const common = {
+    const cmpBase = {
       tenantId: '8',
       startDate: queryForm.value.startDate,
       endDate: queryForm.value.endDate,
-      cmpStartDate: queryForm.value.cmpStartDate,
-      cmpEndDate: queryForm.value.cmpEndDate,
       orgCode: queryForm.value.orgCode,
       showStore: '显示门店'
     }
-    const isDeptMode = totalMode.value === 'dept'
-    // 明细(deptLevels=3)总是查询；部门合计模式下并行查询 deptLevels=2/1 用于合计与总计
-    const [detail, lv2, lv1] = await Promise.all([
-      request.get('/provider/sales/detail', { ...common, deptLevels: '3' }),
-      isDeptMode ? request.get('/provider/sales/detail', { ...common, deptLevels: '2' }) : Promise.resolve(null),
-      isDeptMode ? request.get('/provider/sales/detail', { ...common, deptLevels: '1' }) : Promise.resolve(null)
+    // 环比对比日期 → 明细/环比相关列；同比对比日期 → 同比三列
+    const moM = { cmpStartDate: queryForm.value.cmpStartDate, cmpEndDate: queryForm.value.cmpEndDate }
+    const yoY = { cmpStartDate: queryForm.value.yoyStartDate, cmpEndDate: queryForm.value.yoyEndDate }
+    // 明细(deptLevels=3) + 部门合计(deptLevels=2) + 超市总计(deptLevels=1)，均按两组日期各查一遍
+    const [detail, detailYoY, lv2, lv1, lv2YoY, lv1YoY] = await Promise.all([
+      request.get('/provider/sales/detail', { ...cmpBase, ...moM, deptLevels: '3' }),
+      request.get('/provider/sales/detail', { ...cmpBase, ...yoY, deptLevels: '3' }),
+      request.get('/provider/sales/detail', { ...cmpBase, ...moM, deptLevels: '2' }),
+      request.get('/provider/sales/detail', { ...cmpBase, ...moM, deptLevels: '1' }),
+      request.get('/provider/sales/detail', { ...cmpBase, ...yoY, deptLevels: '2' }),
+      request.get('/provider/sales/detail', { ...cmpBase, ...yoY, deptLevels: '1' })
     ])
     apiData.value = detail
+    apiDataYoY.value = detailYoY
     // 去掉部门为"行政部"的条（用户要求）
-    deptSummary.value = isDeptMode && lv2 ? lv2.filter(r => r['部门名称2'] !== '行政部') : null
-    storeTotal.value = isDeptMode && lv1 ? lv1.filter(r => r['部门名称1'] !== '行政部') : null
+    deptSummary.value = lv2 ? lv2.filter(r => r['部门名称2'] !== '行政部') : null
+    storeTotal.value = lv1 ? lv1.filter(r => r['部门名称1'] !== '行政部') : null
+    deptSummaryYoY.value = lv2YoY ? lv2YoY.filter(r => r['部门名称2'] !== '行政部') : null
+    storeTotalYoY.value = lv1YoY ? lv1YoY.filter(r => r['部门名称1'] !== '行政部') : null
   } catch (e) {
     apiError.value = '数据加载失败: ' + (e.message || '未知错误')
     apiData.value = null
+    apiDataYoY.value = null
     deptSummary.value = null
     storeTotal.value = null
+    deptSummaryYoY.value = null
+    storeTotalYoY.value = null
   } finally {
     apiLoading.value = false
   }
@@ -69,20 +86,22 @@ function resetForm() {
     endDate: '2026-08-10',
     cmpStartDate: '2026-08-11',
     cmpEndDate: '2026-08-11',
+    yoyStartDate: '2026-08-11',
+    yoyEndDate: '2026-08-11',
     orgCode: '1101001'
   }
   deptGroupFilter.value = ''
   apiData.value = null
+  apiDataYoY.value = null
   deptSummary.value = null
   storeTotal.value = null
+  deptSummaryYoY.value = null
+  storeTotalYoY.value = null
   apiError.value = ''
 }
 
 // 页面进入时自动加载一次（直接展示后端真实数据，不再有写死数据兜底）
 onMounted(fetchData)
-
-// 切换合计取值模式时自动重新查询（部门合计模式会额外查 deptLevels=2/1）
-watch(totalMode, () => { fetchData() })
 
 // ========== 数据来源：仅使用后端 API 返回的数据（不再有写死数据） ==========
 
@@ -136,9 +155,20 @@ const sourceData = computed(() => {
   const api = apiData.value
   // 后端未返回数据时，表格为空（不显示任何写死数据）
   if (!api || !api.length) return []
+  // 同比查询结果（同比开始/结束作为对比日期查同一接口）
+  // 注意：两次查询的返回行数/顺序可能不一致（对比区间不同 → 行数不同），
+  // 因此按「部门编码3」建立映射，明细行按编码取同比三列，避免按索引错位
+  const yoyByCode = new Map()
+  for (const r of (apiDataYoY.value || [])) {
+    const code = r['部门编码3']
+    if (code !== null && code !== undefined && !yoyByCode.has(String(code))) {
+      yoyByCode.set(String(code), r)
+    }
+  }
   // 后端返回几条，前端就加载几条；字段为空 → null → 显示空白
   return api.map((ar) => {
     const deptCode = ar['部门编码3'] ?? null
+    const y = deptCode !== null && deptCode !== undefined ? yoyByCode.get(String(deptCode)) : undefined
     return {
       // 机构/部门列
       orgName: ar['机构名称'] ?? null,
@@ -157,8 +187,11 @@ const sourceData = computed(() => {
       customerMoM: momRate(ar['交易笔数'], ar['对期交易笔数']), // (交易笔数-对期交易笔数)/对期交易笔数
       avgPrice: num(ar['客单价']),
       avgPriceMoM: momRate(ar['客单价'], ar['对期客单价']),     // (客单价-对期客单价)/对期客单价
-      // 同比（YoY）：后端未映射对应字段 → 保持 null → 显示空白
-      salesYoY: null, profitYoY: null, customerYoY: null, avgPriceYoY: null,
+      // 同比三列：取"同比开始/结束"那次查询的结果（其余数据舍弃）
+      salesYoY: y ? pct2(y['销售额增长率']) : null,             // 同比销售额增长率
+      profitYoY: y ? pct2(y['毛利额增长率']) : null,            // 同比毛利额增长率
+      customerYoY: y ? momRate(y['交易笔数'], y['对期交易笔数']) : null, // 同比来客数增长率
+      avgPriceYoY: y ? momRate(y['客单价'], y['对期客单价']) : null,     // 同比客单价增长率
     }
   })
 })
@@ -168,29 +201,30 @@ const sourceData = computed(() => {
 // 部门合计模式：从接口返回行构建合计/总计行，前端只负责"按名字放入"
 // 后端已算好：销售额增长率/毛利额增长率（即 (本期-对期)/对期），前端直接渲染；
 // 来客数/客单价环比后端无现成字段，用返回的本期/对期字段"相减再除"。
-function buildRowFromApi(ar, deptName, isSubtotal, isTotal) {
+// yoyAr：同比日期那次查询的对应行，用于填充同比三列（无则显示空白）
+function buildRowFromApi(ar, deptName, isSubtotal, isTotal, yoyAr) {
   return {
     orgName: '', deptGroup: '', deptCode: '',
     deptName,
     salesAmount: num(ar['销售金额']),
-    salesYoY: null,
+    salesYoY: yoyAr ? pct2(yoyAr['销售额增长率']) : null,       // 同比销售额增长率
     salesMoM: pct2(ar['销售额增长率']),        // 销售金额的合计 + 环比增长率
     profitAmount: num(ar['含税毛利']),
-    profitYoY: null,
+    profitYoY: yoyAr ? pct2(yoyAr['毛利额增长率']) : null,      // 同比毛利额增长率
     profitMoM: pct2(ar['毛利额增长率']),        // 含税毛利的合计 + 环比增长率
     profitRate: pct2(ar['毛利率']),            // 毛利率
     customers: num(ar['交易笔数']),            // 交易笔数就是来客数的合计
-    customerYoY: null,
+    customerYoY: yoyAr ? momRate(yoyAr['交易笔数'], yoyAr['对期交易笔数']) : null, // 同比来客数增长率
     customerMoM: momRate(ar['交易笔数'], ar['对期交易笔数']), // 对期交易笔数→环比来客数增长率
     avgPrice: num(ar['客单价']),
-    avgPriceYoY: null,
+    avgPriceYoY: yoyAr ? momRate(yoyAr['客单价'], yoyAr['对期客单价']) : null, // 同比客单价增长率
     avgPriceMoM: momRate(ar['客单价'], ar['对期客单价']),     // (客单价-对期客单价)/对期客单价
     isSubtotal: !!isSubtotal,
     isTotal: !!isTotal
   }
 }
 
-// 累加合计模式：由明细行累加计算小计
+// 回退逻辑：部门级(deptLevels=2)接口行缺失时，由明细行累加计算小计
 function buildSubtotalBySum(rows, g) {
   // ── 本期合计 ──
   const curSales = sum(rows, 'salesAmount')
@@ -236,7 +270,7 @@ function buildSubtotalBySum(rows, g) {
   }
 }
 
-// 累加合计模式：由明细行累加计算总计
+// 回退逻辑：超市(deptLevels=1)接口行缺失时，由明细行累加计算总计
 function buildTotalBySum(detailRows) {
   const tSales = sum(detailRows, 'salesAmount')
   const tProfit = sum(detailRows, 'profitAmount')
@@ -283,36 +317,28 @@ const tableData = computed(() => {
 
   // 固定 4 个部组顺序；无法归组的行（部门编码前缀未知，如 91xx 包装耗材）不展示
   const groups = ['生鲜一部', '生鲜二部', '食品部', '非食部']
-  const deptMode = totalMode.value === 'dept'
 
   for (const g of groups) {
     const rows = data.filter(r => r.deptGroup === g)
     if (!rows.length) continue
     result.push(...rows)
 
-    let subtotal
-    if (deptMode) {
-      // 部门合计：取 deptLevels=2 接口中同名部门行（行政部已过滤）；找不到则回退累加
-      const src = (deptSummary.value || []).find(r => r['部门名称2'] === g)
-      subtotal = src ? buildRowFromApi(src, `${g} 合计`, true, false)
-                     : buildSubtotalBySum(rows, g)
-    } else {
-      subtotal = buildSubtotalBySum(rows, g)
-    }
+    // 部门合计：取 deptLevels=2 接口中同名部门行（行政部已过滤）；找不到则回退累加
+    const src = (deptSummary.value || []).find(r => r['部门名称2'] === g)
+    // 同比日期那次查询的对应行，用于填充同比三列
+    const yoySrc = (deptSummaryYoY.value || []).find(r => r['部门名称2'] === g)
+    const subtotal = src ? buildRowFromApi(src, `${g} 合计`, true, false, yoySrc)
+                         : buildSubtotalBySum(rows, g)
     result.push(subtotal)
   }
 
   // ── 总计行 ──
   const allDetail = result.filter(r => !r.isSubtotal)
-  let total
-  if (deptMode) {
-    // 部门合计：取 deptLevels=1 接口中"超市"行（行政部已过滤）；找不到则回退累加
-    const src = (storeTotal.value || []).find(r => r['部门名称1'] === '超市') || (storeTotal.value || [])[0]
-    total = src ? buildRowFromApi(src, '超市总计', false, true)
-                : buildTotalBySum(allDetail)
-  } else {
-    total = buildTotalBySum(allDetail)
-  }
+  // 超市总计：取 deptLevels=1 接口中"超市"行（行政部已过滤）；找不到则回退累加
+  const src = (storeTotal.value || []).find(r => r['部门名称1'] === '超市') || (storeTotal.value || [])[0]
+  const yoySrc = (storeTotalYoY.value || []).find(r => r['部门名称1'] === '超市') || (storeTotalYoY.value || [])[0]
+  const total = src ? buildRowFromApi(src, '超市总计', false, true, yoySrc)
+                    : buildTotalBySum(allDetail)
   result.push(total)
 
   return result
@@ -416,9 +442,7 @@ function exportExcel() {
           <input type="checkbox" v-model="showMoM" /> 显示环比
         </label>
         <span class="toggle-item toggle-mode">
-          合计取值：
-          <label class="mode-radio"><input type="radio" value="sum" v-model="totalMode" /> 累加合计</label>
-          <label class="mode-radio"><input type="radio" value="dept" v-model="totalMode" /> 部门合计</label>
+          合计取值：部门合计
         </span>
       </div>
     </div>
@@ -441,6 +465,14 @@ function exportExcel() {
         <div class="query-item">
           <label>环比结束:</label>
           <input type="date" v-model="queryForm.cmpEndDate" />
+        </div>
+        <div class="query-item">
+          <label>同比开始:</label>
+          <input type="date" v-model="queryForm.yoyStartDate" />
+        </div>
+        <div class="query-item">
+          <label>同比结束:</label>
+          <input type="date" v-model="queryForm.yoyEndDate" />
         </div>
         <div class="query-item">
           <label>机构编码:</label>
@@ -627,13 +659,6 @@ function exportExcel() {
   gap: 8px;
   color: #333;
   font-weight: 500;
-}
-.mode-radio {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  color: #555;
-  font-weight: 400;
 }
 
 /* 查询 */
