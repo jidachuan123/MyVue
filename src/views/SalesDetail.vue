@@ -7,7 +7,7 @@ const showYoY = ref(true)
 const showMoM = ref(true)
 
 // ========== 合计取值模式 ==========
-// 固定使用「部门合计」：小计取 deptLevels=2 接口行，总计取 deptLevels=1 接口行（去掉行政部）
+// 固定使用「部门合计」：小计取 deptLevels=2 接口行，总计取 deptLevels 不传的机构汇总行
 // （已隐藏「累加合计」，不再提供切换）
 
 // ========== 查询参数（用户输入，不写死） ==========
@@ -32,7 +32,7 @@ const apiError = ref('')
 // 同比数据：用 同比开始/同比结束 作为 cmpStartDate/cmpEndDate 再查一遍同一接口
 // 只取其中的 同比销售额增长率/同比毛利额增长率/同比来客数增长率 三列渲染，其余舍弃
 const apiDataYoY = ref(null)
-// 部门合计模式下的额外数据：deptLevels=2（部门合计行）、deptLevels=1（超市总计行）
+// 部门合计模式下的额外数据：deptLevels=2（部门合计行）、deptLevels 不传（机构汇总 1 行 = 超市总计行）
 const deptSummary = ref(null)
 const storeTotal = ref(null)
 const deptSummaryYoY = ref(null)
@@ -52,20 +52,20 @@ async function fetchData() {
     // 环比对比日期 → 明细/环比相关列；同比对比日期 → 同比三列
     const moM = { cmpStartDate: queryForm.value.cmpStartDate, cmpEndDate: queryForm.value.cmpEndDate }
     const yoY = { cmpStartDate: queryForm.value.yoyStartDate, cmpEndDate: queryForm.value.yoyEndDate }
-    // 明细(deptLevels=3) + 部门合计(deptLevels=2) + 超市总计(deptLevels=1)，均按两组日期各查一遍
-    // 部门层级可从前端输入：明细查询用输入值（留空兜底 3）；小计/总计固定 2/1（页面结构依赖）
+    // 明细(deptLevels=3) + 部门合计(deptLevels=2) + 超市总计(deptLevels 不传=机构汇总)，均按两组日期各查一遍
+    // 部门层级可从前端输入：明细查询用输入值（留空兜底 3）；小计固定 2；总计传 ''（请求封装会过滤空值 → 不发送）→ 后端返回 1 行机构汇总
     const deptLv = queryForm.value.deptLevels || '3'
     const [detail, detailYoY, lv2, lv1, lv2YoY, lv1YoY] = await Promise.all([
       request.get('/provider/sales/detail', { ...cmpBase, ...moM, deptLevels: deptLv }),
       request.get('/provider/sales/detail', { ...cmpBase, ...yoY, deptLevels: deptLv }),
       request.get('/provider/sales/detail', { ...cmpBase, ...moM, deptLevels: '2' }),
-      request.get('/provider/sales/detail', { ...cmpBase, ...moM, deptLevels: '1' }),
+      request.get('/provider/sales/detail', { ...cmpBase, ...moM, deptLevels: '' }),
       request.get('/provider/sales/detail', { ...cmpBase, ...yoY, deptLevels: '2' }),
-      request.get('/provider/sales/detail', { ...cmpBase, ...yoY, deptLevels: '1' })
+      request.get('/provider/sales/detail', { ...cmpBase, ...yoY, deptLevels: '' })
     ])
     apiData.value = detail
     apiDataYoY.value = detailYoY
-    // 去掉部门为"行政部"的条（用户要求）
+    // 去掉部门为"行政部"的条（用户要求）；总计那两遍 deptLevels 不传返回机构汇总（部门名称1 为空，不受此过滤影响）
     deptSummary.value = lv2 ? lv2.filter(r => r['部门名称2'] !== '行政部') : null
     storeTotal.value = lv1 ? lv1.filter(r => r['部门名称1'] !== '行政部') : null
     deptSummaryYoY.value = lv2YoY ? lv2YoY.filter(r => r['部门名称2'] !== '行政部') : null
@@ -338,7 +338,7 @@ const tableData = computed(() => {
 
   // ── 总计行 ──
   const allDetail = result.filter(r => !r.isSubtotal)
-  // 超市总计：取 deptLevels=1 接口中"超市"行（行政部已过滤）；找不到则回退累加
+  // 超市总计：取 deptLevels 不传（机构汇总）的返回行（正常就 1 行，取第一行）；找不到则回退累加
   const src = (storeTotal.value || []).find(r => r['部门名称1'] === '超市') || (storeTotal.value || [])[0]
   const yoySrc = (storeTotalYoY.value || []).find(r => r['部门名称1'] === '超市') || (storeTotalYoY.value || [])[0]
   const total = src ? buildRowFromApi(src, '超市总计', false, true, yoySrc)
