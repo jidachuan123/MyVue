@@ -29,7 +29,7 @@ const queryForm = ref({
   cmpEndDate: '2026-08-11',     // 环比对比结束
   yoyStartDate: '2026-08-11',   // 同比对比开始
   yoyEndDate: '2026-08-11',     // 同比对比结束
-  orgCode: '',                  // 留空查全部机构（各店），可填 1101001 等
+  orgCode: '1101,1102,1191001',  // 默认机构（1101 巨野组/1102 便利组/1191001），留空查全部
   deptLevels: '',               // 部门层级：留空=后端默认口径（正确，15,719）；1=超市；3=来客数翻倍(错)
   department: ''                // 部门编码：留空=后端默认口径（正确）；1=超市
 })
@@ -86,7 +86,7 @@ function resetForm() {
     cmpEndDate: '2026-08-11',
     yoyStartDate: '2026-08-11',
     yoyEndDate: '2026-08-11',
-    orgCode: '',
+    orgCode: '1101,1102,1191001',
     deptLevels: '',
     department: ''
   }
