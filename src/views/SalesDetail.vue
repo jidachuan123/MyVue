@@ -20,7 +20,8 @@ const queryForm = ref({
   cmpEndDate: '2026-08-11',
   yoyStartDate: '2026-08-11',
   yoyEndDate: '2026-08-11',
-  orgCode: '1101001'
+  orgCode: '1101001',
+  deptLevels: '3'   // 部门层级：默认 3=三级部门明细（页面主表格依赖，勿留空；可输入 1/2/3 查询）
 })
 const deptGroupFilter = ref('')
 
@@ -52,9 +53,11 @@ async function fetchData() {
     const moM = { cmpStartDate: queryForm.value.cmpStartDate, cmpEndDate: queryForm.value.cmpEndDate }
     const yoY = { cmpStartDate: queryForm.value.yoyStartDate, cmpEndDate: queryForm.value.yoyEndDate }
     // 明细(deptLevels=3) + 部门合计(deptLevels=2) + 超市总计(deptLevels=1)，均按两组日期各查一遍
+    // 部门层级可从前端输入：明细查询用输入值（留空兜底 3）；小计/总计固定 2/1（页面结构依赖）
+    const deptLv = queryForm.value.deptLevels || '3'
     const [detail, detailYoY, lv2, lv1, lv2YoY, lv1YoY] = await Promise.all([
-      request.get('/provider/sales/detail', { ...cmpBase, ...moM, deptLevels: '3' }),
-      request.get('/provider/sales/detail', { ...cmpBase, ...yoY, deptLevels: '3' }),
+      request.get('/provider/sales/detail', { ...cmpBase, ...moM, deptLevels: deptLv }),
+      request.get('/provider/sales/detail', { ...cmpBase, ...yoY, deptLevels: deptLv }),
       request.get('/provider/sales/detail', { ...cmpBase, ...moM, deptLevels: '2' }),
       request.get('/provider/sales/detail', { ...cmpBase, ...moM, deptLevels: '1' }),
       request.get('/provider/sales/detail', { ...cmpBase, ...yoY, deptLevels: '2' }),
@@ -88,7 +91,8 @@ function resetForm() {
     cmpEndDate: '2026-08-11',
     yoyStartDate: '2026-08-11',
     yoyEndDate: '2026-08-11',
-    orgCode: '1101001'
+    orgCode: '1101001',
+    deptLevels: '3'
   }
   deptGroupFilter.value = ''
   apiData.value = null
@@ -477,6 +481,10 @@ function exportExcel() {
         <div class="query-item">
           <label>机构编码:</label>
           <input type="text" v-model="queryForm.orgCode" placeholder="如 1101001" style="width:100px" />
+        </div>
+        <div class="query-item">
+          <label>部门层级:</label>
+          <input type="text" v-model="queryForm.deptLevels" placeholder="默认3，可输入1/2" style="width:70px" />
         </div>
         <div class="query-item">
           <label>部组名称:</label>
