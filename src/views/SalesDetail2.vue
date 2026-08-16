@@ -155,7 +155,7 @@ const storeRows = computed(() => {
       map.set(key, {
         orgCode: code,
         orgName: '',
-        sales: 0, profit: 0, customers: 0,                 // 本期
+        sales: 0, profit: 0, customers: 0, stockAmount: 0, // 本期（含当日库存金额）
         momSales: 0, momProfit: 0, momCustomers: 0,        // 环比对期
         yoySales: 0, yoyProfit: 0, yoyCustomers: 0,        // 同比对期
         hasData: false
@@ -172,6 +172,7 @@ const storeRows = computed(() => {
     it.sales += num(r['销售金额']) || 0
     it.profit += num(r['含税毛利']) || 0
     it.customers += num(r['交易笔数']) || 0
+    it.stockAmount += num(r['当日库存金额']) || 0
     it.momSales += num(r['对期销售金额']) || 0
     it.momProfit += num(r['对期含税毛利']) || 0
     it.momCustomers += num(r['对期交易笔数']) || 0
@@ -220,6 +221,7 @@ function buildSubtotal(rows, groupName) {
   const sales = rows.reduce((s, r) => s + (num(r.sales) || 0), 0)
   const profit = rows.reduce((s, r) => s + (num(r.profit) || 0), 0)
   const customers = rows.reduce((s, r) => s + (num(r.customers) || 0), 0)
+  const stockAmount = rows.reduce((s, r) => s + (num(r.stockAmount) || 0), 0)
   const yoySales = rows.reduce((s, r) => s + (num(r.yoySales) || 0), 0)
   const yoyProfit = rows.reduce((s, r) => s + (num(r.yoyProfit) || 0), 0)
   const yoyCustomers = rows.reduce((s, r) => s + (num(r.yoyCustomers) || 0), 0)
@@ -233,7 +235,7 @@ function buildSubtotal(rows, groupName) {
     isSubtotal: true,
     orgCode: '',
     orgName: groupName + ' 合计',
-    sales, profit, customers, avgPrice,
+    sales, profit, customers, stockAmount, avgPrice,
     profitRate: profitRateOf(profit, sales),
     yoySalesRate: rate(sales, yoySales),
     momSalesRate: rate(sales, momSales),
@@ -297,7 +299,7 @@ function getRateClass(v) {
 // ========== 导出 Excel (CSV) ==========
 function exportExcel() {
   const headers = [
-    '机构代码', '机构名称', '销售额/元', '同比销售额增长率', '环比销售额增长率',
+    '机构代码', '机构名称', '当日库存金额', '销售额/元', '同比销售额增长率', '环比销售额增长率',
     '毛利额/元', '同比毛利额增长率', '环比毛利额增长率', '毛利率',
     '来客数', '同比来客数增长率', '环比来客数增长率',
     '客单价/元', '同比客单价增长率', '环比客单价增长率'
@@ -305,7 +307,7 @@ function exportExcel() {
   let csv = '\uFEFF' + headers.join(',') + '\n'
   for (const row of tableData.value) {
     const values = [
-      row.orgCode, row.orgName, row.sales,
+      row.orgCode, row.orgName, row.stockAmount, row.sales,
       formatRate(row.yoySalesRate), formatRate(row.momSalesRate),
       row.profit, formatRate(row.yoyProfitRate), formatRate(row.momProfitRate),
       formatPct(row.profitRate),
@@ -406,6 +408,7 @@ function exportExcel() {
           <tr>
             <th class="col-code">机构代码</th>
             <th class="col-org">机构名称</th>
+            <th class="col-num col-stock">当日库存金额</th>
             <th class="col-num col-sales">销售额/元</th>
             <th class="col-rate col-sales">同比<br>销售额增长率</th>
             <th class="col-rate col-sales">环比<br>销售额增长率</th>
@@ -427,6 +430,7 @@ function exportExcel() {
             <tr v-if="row.isSubtotal" class="subtotal">
               <td class="col-code"></td>
               <td class="col-org subtotal-label">{{ row.orgName }}</td>
+              <td class="col-num col-stock">{{ formatAmount(row.stockAmount) }}</td>
               <td class="col-num col-sales">{{ formatAmount(row.sales) }}</td>
               <td :class="['col-rate', 'col-sales', getRateClass(row.yoySalesRate)]">{{ formatRate(row.yoySalesRate) }}</td>
               <td :class="['col-rate', 'col-sales', getRateClass(row.momSalesRate)]">{{ formatRate(row.momSalesRate) }}</td>
@@ -445,6 +449,7 @@ function exportExcel() {
             <tr v-else :class="{ 'odd': idx % 2 === 1 }">
               <td class="col-code">{{ row.orgCode }}</td>
               <td class="col-org">{{ row.orgName }}</td>
+              <td class="col-num col-stock">{{ formatAmount(row.stockAmount) }}</td>
               <td class="col-num col-sales">{{ formatAmount(row.sales) }}</td>
               <td :class="['col-rate', 'col-sales', getRateClass(row.yoySalesRate)]">{{ formatRate(row.yoySalesRate) }}</td>
               <td :class="['col-rate', 'col-sales', getRateClass(row.momSalesRate)]">{{ formatRate(row.momSalesRate) }}</td>
@@ -605,7 +610,7 @@ function exportExcel() {
 }
 .sales-table {
   width: 100%;
-  min-width: 1700px;
+  min-width: 1800px;
   border-collapse: collapse;
   font-size: 12px;
 }
@@ -647,6 +652,7 @@ function exportExcel() {
 .col-profit { background: #e8f5e9 !important; }
 .col-customer { background: #e3f2fd !important; }
 .col-price { background: #fce4ec !important; }
+.col-stock { background: #f3e5f5 !important; }
 
 /* 合计行 */
 .subtotal {
