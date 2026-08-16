@@ -100,7 +100,7 @@ table.fml-table td, table.fml-table th { text-align:left; padding:7px 10px; }
 
 <!-- ========== 控制区 ========== -->
 <div class="card">
-  <h2>查询条件（默认 = SalesDetail.vue 页面初始值）</h2>
+  <h2>查询条件（默认日期动态计算：本期=前一天，环比=前两天，同比=去年的今天）</h2>
   <div class="controls">
     <div class="ctl-group">
       <span class="lbl">本期（开始 / 结束）</span>
@@ -140,7 +140,7 @@ table.fml-table td, table.fml-table th { text-align:left; padding:7px 10px; }
       <button class="btn btn-default" id="btnExport">导出CSV</button>
     </div>
   </div>
-  <div id="status">就绪。点「查询对照」触发 6 遍并发调用并重建页面数据。</div>
+  <div id="status">就绪。默认日期已按规则自动填好（本期=前一天、环比=前两天、同比=去年的今天），点「查询对照」触发 6 遍并发调用并重建页面数据。</div>
   <div class="meta-line" id="metaLine"></div>
 </div>
 
@@ -271,8 +271,24 @@ function getDeptGroup(code) {
 function fmtDate(d) {
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
-function calcYoy(dateStr) { const d = new Date(dateStr + 'T00:00:00'); d.setFullYear(d.getFullYear() - 1); return fmtDate(d); }
+function calcYoy(dateStr) { const d = new Date(dateStr + 'T00:00:00'); d.setDate(d.getDate() + 1); d.setFullYear(d.getFullYear() - 1); return fmtDate(d); }
 function calcMom(dateStr) { const d = new Date(dateStr + 'T00:00:00'); d.setDate(d.getDate() - 1); return fmtDate(d); }
+
+/* ================== 默认日期（动态计算，不写死，与 SalesDetail.vue 一致） ==================
+   规则：本期 = 当天的前一天；环比 = 当天的前两天（本期前一天）；同比 = 去年的今天 */
+function applyDefaultDates() {
+  const now = new Date();
+  const prev = new Date(now); prev.setDate(now.getDate() - 1);        // 前一天 → 本期
+  const prev2 = new Date(now); prev2.setDate(now.getDate() - 2);      // 前两天 → 环比
+  const lastYear = new Date(now); lastYear.setFullYear(now.getFullYear() - 1); // 去年的今天 → 同比
+  document.getElementById('curStart').value = fmtDate(prev);
+  document.getElementById('curEnd').value = fmtDate(prev);
+  document.getElementById('momStart').value = fmtDate(prev2);
+  document.getElementById('momEnd').value = fmtDate(prev2);
+  document.getElementById('yoyStart').value = fmtDate(lastYear);
+  document.getElementById('yoyEnd').value = fmtDate(lastYear);
+}
+applyDefaultDates();
 
 /* ================== 格式化（与页面一致） ================== */
 function esc(s) { if (s === null || s === undefined) return ''; return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
@@ -487,7 +503,7 @@ document.getElementById('btnCalc').addEventListener('click', function () {
   document.getElementById('yoyEnd').value = yoy;
   document.getElementById('momStart').value = mom;
   document.getElementById('momEnd').value = mom;
-  setStatus('已推算：同比（去年同日）' + yoy + '，环比（前一天）' + mom + '。可修改后点「查询对照」。', 'ok');
+  setStatus('已推算：同比（去年的今天）' + yoy + '，环比（本期前一天）' + mom + '。可修改后点「查询对照」。', 'ok');
 });
 
 async function query() {

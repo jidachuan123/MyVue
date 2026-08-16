@@ -18,21 +18,37 @@ import request from '../utils/request'
 //         客单价/毛利率/各增长率 按合计值用公式计算
 // ============================================================
 
-// ========== 查询参数（与「销售详情」页一致，机构编码留空=全部机构） ==========
+// ========== 默认查询日期（动态计算，不写死） ==========
+// 规则：本期 = 当天的前一天；环比 = 当天的前两天（本期前一天）；同比 = 去年的今天
+function fmtDate(d) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+function defaultQueryForm() {
+  const now = new Date()
+  const prev = new Date(now); prev.setDate(now.getDate() - 1)      // 前一天 → 本期
+  const prev2 = new Date(now); prev2.setDate(now.getDate() - 2)    // 前两天 → 环比
+  const lastYear = new Date(now); lastYear.setFullYear(now.getFullYear() - 1) // 去年的今天 → 同比
+  return {
+    startDate: fmtDate(prev),      // 本期开始
+    endDate: fmtDate(prev),        // 本期结束
+    cmpStartDate: fmtDate(prev2),  // 环比对比开始
+    cmpEndDate: fmtDate(prev2),    // 环比对比结束
+    yoyStartDate: fmtDate(lastYear), // 同比对比开始
+    yoyEndDate: fmtDate(lastYear),   // 同比对比结束
+    orgCode: '1101,1102,1191001',  // 默认机构（1101 巨野组/1102 便利组/1191001），留空查全部
+    deptLevels: '',               // 部门层级：留空=后端默认口径（正确，15,719）；1=超市；3=来客数翻倍(错)
+    department: ''                // 部门编码：留空=后端默认口径（正确）；1=超市
+  }
+}
+
+// ========== 查询参数（机构编码留空=全部机构） ==========
 // 默认口径：部门层级/部门编码 留空不传（request.js 自动过滤空值，后端走默认口径，
 //           便利组合计来客数=15,719 与 Excel 一致 —— 已验证 1101001=7,216）
 // 注意：填 deptLevels=3 时接口返回多层部门明细，交易笔数会被重复统计（约翻倍），勿用
-const queryForm = ref({
-  startDate: '2026-08-10',
-  endDate: '2026-08-10',
-  cmpStartDate: '2026-08-11',   // 环比对比开始
-  cmpEndDate: '2026-08-11',     // 环比对比结束
-  yoyStartDate: '2026-08-11',   // 同比对比开始
-  yoyEndDate: '2026-08-11',     // 同比对比结束
-  orgCode: '1101,1102,1191001',  // 默认机构（1101 巨野组/1102 便利组/1191001），留空查全部
-  deptLevels: '',               // 部门层级：留空=后端默认口径（正确，15,719）；1=超市；3=来客数翻倍(错)
-  department: ''                // 部门编码：留空=后端默认口径（正确）；1=超市
-})
+const queryForm = ref(defaultQueryForm())
 
 // ========== API 数据 ==========
 const apiLoading = ref(false)
@@ -79,17 +95,7 @@ async function fetchData() {
 }
 
 function resetForm() {
-  queryForm.value = {
-    startDate: '2026-08-10',
-    endDate: '2026-08-10',
-    cmpStartDate: '2026-08-11',
-    cmpEndDate: '2026-08-11',
-    yoyStartDate: '2026-08-11',
-    yoyEndDate: '2026-08-11',
-    orgCode: '1101,1102,1191001',
-    deptLevels: '',
-    department: ''
-  }
+  queryForm.value = defaultQueryForm()
   momData.value = null
   yoyData.value = null
   apiError.value = ''

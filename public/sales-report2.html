@@ -74,7 +74,7 @@ table.fml-table td, table.fml-table th { text-align:left; padding:7px 10px; }
 
 <!-- ========== 控制区 ========== -->
 <div class="card">
-  <h2>查询条件（默认 = Excel「各店每月最终取值」页签标题日期）</h2>
+  <h2>查询条件（默认日期动态计算：本期=前一天，环比=前两天，同比=去年的今天）</h2>
   <div class="controls">
     <div class="ctl-group">
       <span class="lbl">本期（开始 / 结束）</span>
@@ -85,7 +85,7 @@ table.fml-table td, table.fml-table th { text-align:left; padding:7px 10px; }
       </div>
     </div>
     <div class="ctl-group">
-      <span class="lbl">同比（开始 / 结束，默认去年同日）</span>
+      <span class="lbl">同比（开始 / 结束，默认去年的今天）</span>
       <div class="dates">
         <input type="date" id="yoyStart" value="2025-08-11">
         <span>至</span>
@@ -93,7 +93,7 @@ table.fml-table td, table.fml-table th { text-align:left; padding:7px 10px; }
       </div>
     </div>
     <div class="ctl-group">
-      <span class="lbl">环比（开始 / 结束，默认前一天）</span>
+      <span class="lbl">环比（开始 / 结束，默认本期前一天）</span>
       <div class="dates">
         <input type="date" id="momStart" value="2026-08-09">
         <span>至</span>
@@ -117,7 +117,7 @@ table.fml-table td, table.fml-table th { text-align:left; padding:7px 10px; }
       <button class="btn btn-primary" id="btnQuery">查询对照</button>
     </div>
   </div>
-  <div id="status">就绪。点「查询对照」取数，或先填本期日期再点「一键推算」自动算出同比（去年同日）与环比（前一天）。</div>
+  <div id="status">就绪。默认日期已按规则自动填好（本期=前一天、环比=前两天、同比=去年的今天），点「查询对照」取数，或改完本期日期后点「一键推算」。</div>
   <div class="meta-line" id="metaLine"></div>
 </div>
 
@@ -268,9 +268,27 @@ function getGroup(code) {
 }
 function groupName(g) { return g.replace(/^[ABC]/, ''); }
 
+/* ================== 默认日期（动态计算，不写死） ==================
+   规则：本期 = 当天的前一天；环比 = 当天的前两天（本期前一天）；同比 = 去年的今天 */
+function applyDefaultDates() {
+  const now = new Date();
+  const prev = new Date(now); prev.setDate(now.getDate() - 1);        // 前一天 → 本期
+  const prev2 = new Date(now); prev2.setDate(now.getDate() - 2);      // 前两天 → 环比
+  const lastYear = new Date(now); lastYear.setFullYear(now.getFullYear() - 1); // 去年的今天 → 同比
+  document.getElementById('curStart').value = fmtDate(prev);
+  document.getElementById('curEnd').value = fmtDate(prev);
+  document.getElementById('momStart').value = fmtDate(prev2);
+  document.getElementById('momEnd').value = fmtDate(prev2);
+  document.getElementById('yoyStart').value = fmtDate(lastYear);
+  document.getElementById('yoyEnd').value = fmtDate(lastYear);
+}
+applyDefaultDates();
+
 /* ================== 日期推算 ================== */
+// 同比规则 = 去年的今天：本期默认是「当天的前一天」，故 去年的今天 = 本期 + 1 天 再退一年
 function calcYoy(dateStr) {
   const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() + 1);
   d.setFullYear(d.getFullYear() - 1);
   return fmtDate(d);
 }
@@ -287,7 +305,7 @@ document.getElementById('btnCalc').addEventListener('click', function () {
   document.getElementById('yoyEnd').value = yoy;
   document.getElementById('momStart').value = mom;
   document.getElementById('momEnd').value = mom;
-  setStatus('已推算：同比（去年同日）' + yoy + '，环比（前一天）' + mom + '。可修改后点「查询对照」。', 'ok');
+  setStatus('已推算：同比（去年的今天）' + yoy + '，环比（本期前一天）' + mom + '。可修改后点「查询对照」。', 'ok');
 });
 
 /* ================== 取数 ================== */

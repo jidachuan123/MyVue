@@ -10,19 +10,35 @@ const showMoM = ref(true)
 // 固定使用「部门合计」：小计取 deptLevels=2 接口行，总计取 deptLevels 不传的机构汇总行
 // （已隐藏「累加合计」，不再提供切换）
 
-// ========== 查询参数（用户输入，不写死） ==========
+// ========== 默认查询日期（动态计算，不写死） ==========
+// 规则：本期 = 当天的前一天；环比 = 当天的前两天（本期前一天）；同比 = 去年的今天
+function fmtDate(d) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+function defaultQueryForm() {
+  const now = new Date()
+  const prev = new Date(now); prev.setDate(now.getDate() - 1)      // 前一天 → 本期
+  const prev2 = new Date(now); prev2.setDate(now.getDate() - 2)    // 前两天 → 环比
+  const lastYear = new Date(now); lastYear.setFullYear(now.getFullYear() - 1) // 去年的今天 → 同比
+  return {
+    startDate: fmtDate(prev),        // 本期开始
+    endDate: fmtDate(prev),          // 本期结束
+    cmpStartDate: fmtDate(prev2),    // 环比对比开始
+    cmpEndDate: fmtDate(prev2),      // 环比对比结束
+    yoyStartDate: fmtDate(lastYear), // 同比对比开始
+    yoyEndDate: fmtDate(lastYear),   // 同比对比结束
+    orgCode: '1101001',
+    deptLevels: '3'   // 部门层级：默认 3=三级部门明细（页面主表格依赖，勿留空；可输入 1/2/3 查询）
+  }
+}
+
+// ========== 查询参数 ==========
 // cmpStartDate/cmpEndDate = 环比对比日期；yoyStartDate/yoyEndDate = 同比对比日期
 // 两者作用完全一样：都作为接口的 cmpStartDate/cmpEndDate（SQL 对比日期）传参
-const queryForm = ref({
-  startDate: '2026-08-10',
-  endDate: '2026-08-10',
-  cmpStartDate: '2026-08-11',
-  cmpEndDate: '2026-08-11',
-  yoyStartDate: '2026-08-11',
-  yoyEndDate: '2026-08-11',
-  orgCode: '1101001',
-  deptLevels: '3'   // 部门层级：默认 3=三级部门明细（页面主表格依赖，勿留空；可输入 1/2/3 查询）
-})
+const queryForm = ref(defaultQueryForm())
 const deptGroupFilter = ref('')
 
 // ========== API 数据 ==========
@@ -84,16 +100,7 @@ async function fetchData() {
 }
 
 function resetForm() {
-  queryForm.value = {
-    startDate: '2026-08-10',
-    endDate: '2026-08-10',
-    cmpStartDate: '2026-08-11',
-    cmpEndDate: '2026-08-11',
-    yoyStartDate: '2026-08-11',
-    yoyEndDate: '2026-08-11',
-    orgCode: '1101001',
-    deptLevels: '3'
-  }
+  queryForm.value = defaultQueryForm()
   deptGroupFilter.value = ''
   apiData.value = null
   apiDataYoY.value = null
