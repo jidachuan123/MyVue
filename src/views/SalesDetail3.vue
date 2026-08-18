@@ -1,87 +1,73 @@
 <script setup>
+/**
+ * 销售详情1（数据中台）—— 预计算版（查 dw.rpt_sale_detail_precompute，秒级）
+ *
+ * 与原 SalesDetail.vue（销售详情1，引擎直查）的区别：
+ *   1. 取数接口改为 /provider/sales/precompute（每天凌晨 2:00 已跑批，静态查表 <100ms）
+ *   2. 查询条件简化为「业务日期」（预计算表 query_date 为单日）+ 机构编码
+ *   3. 顶部新增「预计算管理」面板：手动触发回补（输入任意历史日期）+ 最近跑批记录
+ *
+ * 原销售详情1 保留不动，作为对账基准。
+ */
 import { ref, computed, onMounted } from 'vue'
 import request from '../utils/request'
 
-// ========== 同比/环比列显隐开关 ==========
-const showYoY = ref(true)
-const showMoM = ref(true)
-
-// ========== 合计取值模式 ==========
-// 固定使用「部门合计」：小计取 deptLevels=2 接口行，总计取 deptLevels 不传的机构汇总行
-// （已隐藏「累加合计」，不再提供切换）
-
-// ========== 默认查询日期（动态计算，不写死） ==========
-// 规则：本期 = 当天的前一天；环比 = 当天的前两天（本期前一天）；同比 = 去年的今天
 function fmtDate(d) {
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
 }
+
+// 业务日期默认 = 昨天（与预计算定时任务一致）
 function defaultQueryForm() {
   const now = new Date()
-  const prev = new Date(now); prev.setDate(now.getDate() - 1)      // 前一天 → 本期
-  const prev2 = new Date(now); prev2.setDate(now.getDate() - 2)    // 前两天 → 环比
-  const lastYear = new Date(now); lastYear.setFullYear(now.getFullYear() - 1) // 去年的今天 → 同比
+  const prev = new Date(now); prev.setDate(now.getDate() - 1)
   return {
-    startDate: fmtDate(prev),        // 本期开始
-    endDate: fmtDate(prev),          // 本期结束
-    cmpStartDate: fmtDate(prev2),    // 环比对比开始
-    cmpEndDate: fmtDate(prev2),      // 环比对比结束
-    yoyStartDate: fmtDate(lastYear), // 同比对比开始
-    yoyEndDate: fmtDate(lastYear),   // 同比对比结束
-    orgCode: '1101001',
-    deptLevels: '3'   // 部门层级：默认 3=三级部门明细（页面主表格依赖，勿留空；可输入 1/2/3 查询）
+    queryDate: fmtDate(prev),
+    orgCode: '1101001'
   }
 }
 
-// ========== 查询参数 ==========
-// cmpStartDate/cmpEndDate = 环比对比日期；yoyStartDate/yoyEndDate = 同比对比日期
-// 两者作用完全一样：都作为接口的 cmpStartDate/cmpEndDate（SQL 对比日期）传参
 const queryForm = ref(defaultQueryForm())
 const deptGroupFilter = ref('')
+const showYoY = ref(true)
+const showMoM = ref(true)
 
 // ========== API 数据 ==========
 const apiData = ref(null)
 const apiLoading = ref(false)
 const apiError = ref('')
-// 同比数据：用 同比开始/同比结束 作为 cmpStartDate/cmpEndDate 再查一遍同一接口
-// 只取其中的 同比销售额增长率/同比毛利额增长率/同比来客数增长率 三列渲染，其余舍弃
+// 同比数据：comparisonType=YOY 那次查询（只取同比三列渲染）
 const apiDataYoY = ref(null)
-// 部门合计模式下的额外数据：deptLevels=2（部门合计行）、deptLevels 不传（机构汇总 1 行 = 超市总计行）
-const deptSummary = ref(null)
-const storeTotal = ref(null)
-const deptSummaryYoY = ref(null)
-const storeTotalYoY = ref(null)
+const deptSummary = ref(null)      // deptLevels=2 部门合计（环比）
+const storeTotal = ref(null)       // deptLevels=空 机构汇总（环比）
+const deptSummaryYoY = ref(null)   // deptLevels=2 部门合计（同比）
+const storeTotalYoY = ref(null)    // deptLevels=空 机构汇总（同比）
 
 async function fetchData() {
   apiLoading.value = true
   apiError.value = ''
   try {
     const cmpBase = {
-      tenantId: '8',
-      startDate: queryForm.value.startDate,
-      endDate: queryForm.value.endDate,
-      orgCode: queryForm.value.orgCode,
-      showStore: '显示门店'
+      queryDate: queryForm.value.queryDate,
+      orgCode: queryForm.value.orgCode
     }
-    // 环比对比日期 → 明细/环比相关列；同比对比日期 → 同比三列
-    const moM = { cmpStartDate: queryForm.value.cmpStartDate, cmpEndDate: queryForm.value.cmpEndDate }
-    const yoY = { cmpStartDate: queryForm.value.yoyStartDate, cmpEndDate: queryForm.value.yoyEndDate }
-    // 明细(deptLevels=3) + 部门合计(deptLevels=2) + 超市总计(deptLevels 不传=机构汇总)，均按两组日期各查一遍
-    // 部门层级可从前端输入：明细查询用输入值（留空兜底 3）；小计固定 2；总计传 ''（请求封装会过滤空值 → 不发送）→ 后端返回 1 行机构汇总
-    const deptLv = queryForm.value.deptLevels || '3'
+    const moM = { comparisonType: 'MOM' }
+    const yoY = { comparisonType: 'YOY' }
+    // 明细(deptLevels=3) + 部门合计(deptLevels=2) + 超市总计(deptLevels 不传=机构汇总)，各按环比/同比查一遍
+    // deptLevels 传 '' 时请求封装过滤空值不发送 → 后端默认空 = 机构汇总
     const [detail, detailYoY, lv2, lv1, lv2YoY, lv1YoY] = await Promise.all([
-      request.get('/provider/sales/detail', { ...cmpBase, ...moM, deptLevels: deptLv }),
-      request.get('/provider/sales/detail', { ...cmpBase, ...yoY, deptLevels: deptLv }),
-      request.get('/provider/sales/detail', { ...cmpBase, ...moM, deptLevels: '2' }),
-      request.get('/provider/sales/detail', { ...cmpBase, ...moM, deptLevels: '' }),
-      request.get('/provider/sales/detail', { ...cmpBase, ...yoY, deptLevels: '2' }),
-      request.get('/provider/sales/detail', { ...cmpBase, ...yoY, deptLevels: '' })
+      request.get('/provider/sales/precompute', { ...cmpBase, ...moM, deptLevels: '3' }),
+      request.get('/provider/sales/precompute', { ...cmpBase, ...yoY, deptLevels: '3' }),
+      request.get('/provider/sales/precompute', { ...cmpBase, ...moM, deptLevels: '2' }),
+      request.get('/provider/sales/precompute', { ...cmpBase, ...moM, deptLevels: '' }),
+      request.get('/provider/sales/precompute', { ...cmpBase, ...yoY, deptLevels: '2' }),
+      request.get('/provider/sales/precompute', { ...cmpBase, ...yoY, deptLevels: '' })
     ])
     apiData.value = detail
     apiDataYoY.value = detailYoY
-    // 去掉部门为"行政部"的条（用户要求）；总计那两遍 deptLevels 不传返回机构汇总（部门名称1 为空，不受此过滤影响）
+    // 去掉部门为"行政部"的条；总计那两遍 deptLevels 不传返回机构汇总（部门名称1 为空，不受此过滤影响）
     deptSummary.value = lv2 ? lv2.filter(r => r['部门名称2'] !== '行政部') : null
     storeTotal.value = lv1 ? lv1.filter(r => r['部门名称1'] !== '行政部') : null
     deptSummaryYoY.value = lv2YoY ? lv2YoY.filter(r => r['部门名称2'] !== '行政部') : null
@@ -111,10 +97,55 @@ function resetForm() {
   apiError.value = ''
 }
 
-// 页面进入时自动加载一次（直接展示后端真实数据，不再有写死数据兜底）
-onMounted(fetchData)
+// ========== 预计算管理（手动触发回补 + 最近跑批记录） ==========
+const triggerForm = ref({ date: defaultQueryForm().queryDate, orgCodes: '1101001' })
+const triggering = ref(false)
+const triggerMsg = ref('')
+const batchLogs = ref([])
 
-// ========== 数据来源：仅使用后端 API 返回的数据（不再有写死数据） ==========
+async function loadLogs() {
+  try {
+    batchLogs.value = await request.get('/provider/sales/precompute/logs', { limit: 20 })
+  } catch (e) {
+    console.error('加载跑批记录失败:', e)
+  }
+}
+
+async function triggerPrecompute() {
+  if (!triggerForm.value.date) {
+    triggerMsg.value = '请先选择业务日期'
+    return
+  }
+  const orgs = (triggerForm.value.orgCodes || '').split(',').map(s => s.trim()).filter(Boolean)
+  if (!orgs.length) {
+    triggerMsg.value = '请填写机构编码（多个用英文逗号分隔）'
+    return
+  }
+  triggering.value = true
+  triggerMsg.value = `跑批中（${orgs.length} 个机构 × 三档全量重算，约 ${orgs.length * 1}-2 分钟），请稍候...`
+  try {
+    // orgCode 支持多个，英文逗号分隔；后端逐个机构跑批（幂等）
+    const r = await request.post('/provider/sales/precompute/trigger?queryDate=' + triggerForm.value.date + '&orgCode=' + encodeURIComponent(orgs.join(',')), {})
+    triggerMsg.value = r.message || (r.code === 0 ? '跑批完成' : '跑批失败')
+    if (r.code === 0) {
+      // 跑批完成后自动刷新表格与日志；查询机构自动切为跑批的第一个机构
+      queryForm.value.queryDate = triggerForm.value.date
+      queryForm.value.orgCode = orgs[0]
+      await fetchData()
+      await loadLogs()
+    }
+  } catch (e) {
+    triggerMsg.value = '触发失败: ' + (e.message || '未知错误')
+  } finally {
+    triggering.value = false
+  }
+}
+
+// 页面进入时自动加载一次 + 加载最近跑批记录
+onMounted(() => {
+  fetchData()
+  loadLogs()
+})
 
 // ========== 辅助函数 ==========
 function sum(rows, field) {
@@ -134,18 +165,15 @@ function hasAny(rows, field) {
 }
 
 // ========== 数值辅助 ==========
-// 转数字，空值/非数字 → null
 function num(v) {
   if (v === null || v === undefined || v === '') return null
   const n = Number(v)
   return isNaN(n) ? null : n
 }
-// 百分比数值保留两位小数
 function pct2(v) {
   const n = num(v)
   return n === null ? null : Math.round(n * 100) / 100
 }
-// 环比增长率 = (本期 - 对期) ÷ 对期 × 100
 function momRate(cur, prior) {
   const c = num(cur)
   const p = num(prior)
@@ -153,8 +181,7 @@ function momRate(cur, prior) {
   return calcRate(c, p)
 }
 
-// ========== 合并数据源：API 返回后覆盖 机构/部门 与 数值列 ==========
-// 按部门编码前2位推导部组名称；未知前缀返回空字符串，tableData 中该行不展示（如 91xx 包装耗材）
+// ========== 合并数据源 ==========
 function getDeptGroup(code) {
   if (!code) return ''
   const prefix = String(code).substring(0, 2)
@@ -164,11 +191,8 @@ function getDeptGroup(code) {
 
 const sourceData = computed(() => {
   const api = apiData.value
-  // 后端未返回数据时，表格为空（不显示任何写死数据）
   if (!api || !api.length) return []
-  // 同比查询结果（同比开始/结束作为对比日期查同一接口）
-  // 注意：两次查询的返回行数/顺序可能不一致（对比区间不同 → 行数不同），
-  // 因此按「部门编码3」建立映射，明细行按编码取同比三列，避免按索引错位
+  // 按「部门编码3」建立同比映射，明细行按编码取同比三列，避免按索引错位
   const yoyByCode = new Map()
   for (const r of (apiDataYoY.value || [])) {
     const code = r['部门编码3']
@@ -176,60 +200,49 @@ const sourceData = computed(() => {
       yoyByCode.set(String(code), r)
     }
   }
-  // 后端返回几条，前端就加载几条；字段为空 → null → 显示空白
   return api.map((ar) => {
     const deptCode = ar['部门编码3'] ?? null
     const y = deptCode !== null && deptCode !== undefined ? yoyByCode.get(String(deptCode)) : undefined
     return {
-      // 机构/部门列
       orgName: ar['机构名称'] ?? null,
       deptGroup: getDeptGroup(deptCode),
       deptCode,
       deptName: ar['部门名称3'] ?? null,
-      // 数值列：取后端返回字段，为空 → null → 显示空白
       salesAmount: num(ar['销售金额']),
-      // 后端已算好增长率字段（SQL 中 DBC*100，即 (本期-对期)/对期），前端直接渲染
       salesMoM: pct2(ar['销售额增长率']),
       profitAmount: num(ar['含税毛利']),
       profitMoM: pct2(ar['毛利额增长率']),
-      profitRate: pct2(ar['毛利率']),                          // 毛利率
+      profitRate: pct2(ar['毛利率']),
       customers: num(ar['交易笔数']),
-      // 后端无来客数/客单价增长率字段，用返回的本期/对期字段"相减再除"
-      customerMoM: momRate(ar['交易笔数'], ar['对期交易笔数']), // (交易笔数-对期交易笔数)/对期交易笔数
+      customerMoM: momRate(ar['交易笔数'], ar['对期交易笔数']),
       avgPrice: num(ar['客单价']),
-      avgPriceMoM: momRate(ar['客单价'], ar['对期客单价']),     // (客单价-对期客单价)/对期客单价
-      // 同比三列：取"同比开始/结束"那次查询的结果（其余数据舍弃）
-      salesYoY: y ? pct2(y['销售额增长率']) : null,             // 同比销售额增长率
-      profitYoY: y ? pct2(y['毛利额增长率']) : null,            // 同比毛利额增长率
-      customerYoY: y ? momRate(y['交易笔数'], y['对期交易笔数']) : null, // 同比来客数增长率
-      avgPriceYoY: y ? momRate(y['客单价'], y['对期客单价']) : null,     // 同比客单价增长率
+      avgPriceMoM: momRate(ar['客单价'], ar['对期客单价']),
+      salesYoY: y ? pct2(y['销售额增长率']) : null,
+      profitYoY: y ? pct2(y['毛利额增长率']) : null,
+      customerYoY: y ? momRate(y['交易笔数'], y['对期交易笔数']) : null,
+      avgPriceYoY: y ? momRate(y['客单价'], y['对期客单价']) : null,
     }
   })
 })
 
 // ========== 构建表格数据（含小计和总计） ==========
-
-// 部门合计模式：从接口返回行构建合计/总计行，前端只负责"按名字放入"
-// 后端已算好：销售额增长率/毛利额增长率（即 (本期-对期)/对期），前端直接渲染；
-// 来客数/客单价环比后端无现成字段，用返回的本期/对期字段"相减再除"。
-// yoyAr：同比日期那次查询的对应行，用于填充同比三列（无则显示空白）
 function buildRowFromApi(ar, deptName, isSubtotal, isTotal, yoyAr) {
   return {
     orgName: '', deptGroup: '', deptCode: '',
     deptName,
     salesAmount: num(ar['销售金额']),
-    salesYoY: yoyAr ? pct2(yoyAr['销售额增长率']) : null,       // 同比销售额增长率
-    salesMoM: pct2(ar['销售额增长率']),        // 销售金额的合计 + 环比增长率
+    salesYoY: yoyAr ? pct2(yoyAr['销售额增长率']) : null,
+    salesMoM: pct2(ar['销售额增长率']),
     profitAmount: num(ar['含税毛利']),
-    profitYoY: yoyAr ? pct2(yoyAr['毛利额增长率']) : null,      // 同比毛利额增长率
-    profitMoM: pct2(ar['毛利额增长率']),        // 含税毛利的合计 + 环比增长率
-    profitRate: pct2(ar['毛利率']),            // 毛利率
-    customers: num(ar['交易笔数']),            // 交易笔数就是来客数的合计
-    customerYoY: yoyAr ? momRate(yoyAr['交易笔数'], yoyAr['对期交易笔数']) : null, // 同比来客数增长率
-    customerMoM: momRate(ar['交易笔数'], ar['对期交易笔数']), // 对期交易笔数→环比来客数增长率
+    profitYoY: yoyAr ? pct2(yoyAr['毛利额增长率']) : null,
+    profitMoM: pct2(ar['毛利额增长率']),
+    profitRate: pct2(ar['毛利率']),
+    customers: num(ar['交易笔数']),
+    customerYoY: yoyAr ? momRate(yoyAr['交易笔数'], yoyAr['对期交易笔数']) : null,
+    customerMoM: momRate(ar['交易笔数'], ar['对期交易笔数']),
     avgPrice: num(ar['客单价']),
-    avgPriceYoY: yoyAr ? momRate(yoyAr['客单价'], yoyAr['对期客单价']) : null, // 同比客单价增长率
-    avgPriceMoM: momRate(ar['客单价'], ar['对期客单价']),     // (客单价-对期客单价)/对期客单价
+    avgPriceYoY: yoyAr ? momRate(yoyAr['客单价'], yoyAr['对期客单价']) : null,
+    avgPriceMoM: momRate(ar['客单价'], ar['对期客单价']),
     isSubtotal: !!isSubtotal,
     isTotal: !!isTotal
   }
@@ -237,12 +250,10 @@ function buildRowFromApi(ar, deptName, isSubtotal, isTotal, yoyAr) {
 
 // 回退逻辑：部门级(deptLevels=2)接口行缺失时，由明细行累加计算小计
 function buildSubtotalBySum(rows, g) {
-  // ── 本期合计 ──
   const curSales = sum(rows, 'salesAmount')
   const curProfit = sum(rows, 'profitAmount')
   const curCustomers = sum(rows, 'customers')
 
-  // ── 反推同期基值并汇总 ──
   const priorYoY = { sales: 0, profit: 0, customers: 0 }
   const priorMoM = { sales: 0, profit: 0, customers: 0 }
   for (const r of rows) {
@@ -254,12 +265,9 @@ function buildSubtotalBySum(rows, g) {
     priorMoM.customers += priorValue(r.customers, r.customerMoM)
   }
 
-  // ── 派生指标 ──
   const profitRate = curSales > 0 ? Number(((curProfit / curSales) * 100).toFixed(2)) : 0
   const avgPrice = curCustomers > 0 ? Math.round(curSales / curCustomers) : 0
 
-  // ── 同比/环比增长率 ──
-  // 同比：若组内明细行同比字段全为空（后端未映射），小计同比显示空白
   const salesYoY    = hasAny(rows, 'salesYoY') ? calcRate(curSales, priorYoY.sales) : null
   const salesMoM    = calcRate(curSales, priorMoM.sales)
   const profitYoY   = hasAny(rows, 'profitYoY') ? calcRate(curProfit, priorYoY.profit) : null
@@ -281,7 +289,7 @@ function buildSubtotalBySum(rows, g) {
   }
 }
 
-// 回退逻辑：超市(deptLevels=1)接口行缺失时，由明细行累加计算总计
+// 回退逻辑：超市(deptLevels=空)接口行缺失时，由明细行累加计算总计
 function buildTotalBySum(detailRows) {
   const tSales = sum(detailRows, 'salesAmount')
   const tProfit = sum(detailRows, 'profitAmount')
@@ -326,7 +334,6 @@ const tableData = computed(() => {
   const data = sourceData.value
   const result = []
 
-  // 固定 4 个部组顺序；无法归组的行（部门编码前缀未知，如 91xx 包装耗材）不展示
   const groups = ['生鲜一部', '生鲜二部', '食品部', '非食部']
 
   for (const g of groups) {
@@ -334,9 +341,7 @@ const tableData = computed(() => {
     if (!rows.length) continue
     result.push(...rows)
 
-    // 部门合计：取 deptLevels=2 接口中同名部门行（行政部已过滤）；找不到则回退累加
     const src = (deptSummary.value || []).find(r => r['部门名称2'] === g)
-    // 同比日期那次查询的对应行，用于填充同比三列
     const yoySrc = (deptSummaryYoY.value || []).find(r => r['部门名称2'] === g)
     const subtotal = src ? buildRowFromApi(src, `${g} 合计`, true, false, yoySrc)
                          : buildSubtotalBySum(rows, g)
@@ -345,7 +350,6 @@ const tableData = computed(() => {
 
   // ── 总计行 ──
   const allDetail = result.filter(r => !r.isSubtotal)
-  // 超市总计：取 deptLevels 不传（机构汇总）的返回行（正常就 1 行，取第一行）；找不到则回退累加
   const src = (storeTotal.value || []).find(r => r['部门名称1'] === '超市') || (storeTotal.value || [])[0]
   const yoySrc = (storeTotalYoY.value || []).find(r => r['部门名称1'] === '超市') || (storeTotalYoY.value || [])[0]
   const total = src ? buildRowFromApi(src, '超市总计', false, true, yoySrc)
@@ -355,7 +359,7 @@ const tableData = computed(() => {
   return result
 })
 
-// ========== 实际展示的明细条数（不含小计/总计；包装耗材等未归组行被过滤后不计入） ==========
+// 实际展示的明细条数（不含小计/总计；包装耗材等未归组行被过滤后不计入）
 const loadedCount = computed(() =>
   tableData.value.filter(r => !r.isSubtotal && !r.isTotal).length
 )
@@ -379,6 +383,11 @@ function getRateClass(val) {
   if (val > 0) return 'rate-up'
   if (val < 0) return 'rate-down'
   return ''
+}
+// 时间戳显示（etl_time 是 ISO 字符串，截取到秒）
+function fmtTime(v) {
+  if (!v) return ''
+  return String(v).replace('T', ' ').substring(0, 19)
 }
 
 // ========== 导出 Excel (CSV) ==========
@@ -430,7 +439,7 @@ function exportExcel() {
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
   const link = document.createElement('a')
   link.href = URL.createObjectURL(blob)
-  link.download = '销售详情1_2026-08-10.csv'
+  link.download = '销售详情1_数据中台_' + (queryForm.value.queryDate || '') + '.csv'
   link.click()
   URL.revokeObjectURL(link.href)
 }
@@ -440,10 +449,11 @@ function exportExcel() {
   <div class="sales-detail-page">
     <!-- 标题区域 -->
     <div class="page-header">
-      <h2>部门销售详情1</h2>
+      <h2>部门销售详情1（数据中台）</h2>
       <div class="date-info">
-        <span class="tag current">查询日期：{{ queryForm.startDate }} ~ {{ queryForm.endDate }}</span>
-        <span v-if="apiData" class="tag loaded">已加载 {{ loadedCount }} 条API数据</span>
+        <span class="tag current">业务日期：{{ queryForm.queryDate }}</span>
+        <span v-if="apiData" class="tag loaded">已加载 {{ loadedCount }} 条数据（查预计算表）</span>
+        <span class="tag note">凌晨 2:00 自动跑批，数据来自 dw.rpt_sale_detail_precompute</span>
       </div>
       <div class="toggle-row">
         <label class="toggle-item">
@@ -458,40 +468,67 @@ function exportExcel() {
       </div>
     </div>
 
+    <!-- 预计算管理面板 -->
+    <div class="manage-panel">
+      <h3>⚡ 预计算管理（dw.rpt_sale_detail_precompute）</h3>
+      <div class="manage-row">
+        <div class="query-item">
+          <label>业务日期:</label>
+          <input type="date" v-model="triggerForm.date" />
+        </div>
+        <div class="query-item">
+          <label>机构编码:</label>
+          <input type="text" v-model="triggerForm.orgCodes" placeholder="多个用逗号分隔，如 1101001,1102" style="width:230px" />
+        </div>
+        <button class="btn-trigger" @click="triggerPrecompute" :disabled="triggering">
+          {{ triggering ? '跑批中...' : '▶ 手动触发回补' }}
+        </button>
+        <span class="trigger-msg" :class="{ 'msg-err': triggerMsg && triggerMsg.indexOf('失败') >= 0 }">{{ triggerMsg }}</span>
+        <span class="trigger-hint">支持多个机构（逗号分隔）逐个跑批；输入昨天可补跑凌晨失败的数据，输入任意历史日期可重算覆盖（幂等）</span>
+      </div>
+      <div class="log-table-wrap" v-if="batchLogs.length">
+        <table class="log-table">
+          <thead>
+            <tr>
+              <th>query_date</th>
+              <th>机构</th>
+              <th>comparison</th>
+              <th>batch_id</th>
+              <th>etl_time</th>
+              <th>行数</th>
+              <th>status</th>
+              <th>trigger</th>
+              <th>message</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(lg, i) in batchLogs" :key="i">
+              <td>{{ lg.query_date }}</td>
+              <td>{{ lg.org_code }}</td>
+              <td>{{ lg.comparison_type }}</td>
+              <td>{{ lg.batch_id }}</td>
+              <td>{{ fmtTime(lg.etl_time) }}</td>
+              <td>{{ lg.row_count }}</td>
+              <td :class="lg.status === 'SUCCESS' ? 'st-ok' : 'st-err'">{{ lg.status }}</td>
+              <td>{{ lg.trigger_type }}</td>
+              <td class="lg-msg">{{ lg.message }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div v-else class="log-empty">暂无跑批记录（每天凌晨 2:00 定时任务将自动生成；也可手动触发）</div>
+    </div>
+
     <!-- 查询区域 -->
     <div class="query-panel">
       <div class="query-row">
         <div class="query-item">
-          <label>开始日期:</label>
-          <input type="date" v-model="queryForm.startDate" />
-        </div>
-        <div class="query-item">
-          <label>结束日期:</label>
-          <input type="date" v-model="queryForm.endDate" />
-        </div>
-        <div class="query-item">
-          <label>环比开始:</label>
-          <input type="date" v-model="queryForm.cmpStartDate" />
-        </div>
-        <div class="query-item">
-          <label>环比结束:</label>
-          <input type="date" v-model="queryForm.cmpEndDate" />
-        </div>
-        <div class="query-item">
-          <label>同比开始:</label>
-          <input type="date" v-model="queryForm.yoyStartDate" />
-        </div>
-        <div class="query-item">
-          <label>同比结束:</label>
-          <input type="date" v-model="queryForm.yoyEndDate" />
+          <label>业务日期:</label>
+          <input type="date" v-model="queryForm.queryDate" />
         </div>
         <div class="query-item">
           <label>机构编码:</label>
           <input type="text" v-model="queryForm.orgCode" placeholder="如 1101001" style="width:100px" />
-        </div>
-        <div class="query-item">
-          <label>部门层级:</label>
-          <input type="text" v-model="queryForm.deptLevels" placeholder="默认3，可输入1/2" style="width:70px" />
         </div>
         <div class="query-item">
           <label>部组名称:</label>
@@ -623,12 +660,12 @@ function exportExcel() {
   text-align: center;
   padding: 20px 16px 12px;
   border-bottom: 1px solid #e8e8e8;
-  background: linear-gradient(135deg, #fff8e1 0%, #fffde7 100%);
+  background: linear-gradient(135deg, #e8eaf6 0%, #e3f2fd 100%);
 }
 .page-header h2 {
   font-size: 18px;
   font-weight: 700;
-  color: #b71c1c;
+  color: #1a237e;
   margin-bottom: 10px;
   letter-spacing: 1px;
 }
@@ -652,6 +689,10 @@ function exportExcel() {
   background: #e8f5e9;
   color: #2e7d32;
 }
+.tag.note {
+  background: #fff3e0;
+  color: #e65100;
+}
 .toggle-row {
   display: flex;
   justify-content: center;
@@ -674,6 +715,106 @@ function exportExcel() {
   gap: 8px;
   color: #333;
   font-weight: 500;
+}
+
+/* 预计算管理面板 */
+.manage-panel {
+  padding: 14px 20px;
+  border-bottom: 2px solid #ffb300;
+  background: linear-gradient(135deg, #fffde7 0%, #fff8e1 100%);
+}
+.manage-panel h3 {
+  font-size: 14px;
+  color: #e65100;
+  margin-bottom: 10px;
+  letter-spacing: 0.5px;
+}
+.manage-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.manage-row .query-item label {
+  white-space: nowrap;
+  color: #555;
+  font-size: 13px;
+}
+.manage-row .query-item input[type="date"] {
+  padding: 5px 8px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  font-size: 13px;
+  outline: none;
+  background: #fff;
+  width: 140px;
+}
+.btn-trigger {
+  background: #fa8c16;
+  color: #fff;
+  border: none;
+  padding: 6px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background .2s;
+}
+.btn-trigger:hover { background: #ffa940; }
+.btn-trigger:disabled { background: #ffd591; cursor: not-allowed; }
+.trigger-msg {
+  font-size: 12px;
+  color: #2e7d32;
+}
+.trigger-msg.msg-err {
+  color: #d32f2f;
+}
+.trigger-hint {
+  font-size: 11px;
+  color: #999;
+}
+.log-table-wrap {
+  margin-top: 10px;
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1px solid #e8e8e8;
+  border-radius: 4px;
+  background: #fff;
+}
+.log-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.log-table th {
+  position: sticky;
+  top: 0;
+  background: #f5f5f5;
+  color: #333;
+  font-weight: 600;
+  padding: 6px 8px;
+  border: 1px solid #e0e0e0;
+  white-space: nowrap;
+  z-index: 5;
+}
+.log-table td {
+  padding: 5px 8px;
+  border: 1px solid #f0f0f0;
+  text-align: center;
+  white-space: nowrap;
+}
+.log-table td.lg-msg {
+  text-align: left;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.log-table .st-ok { color: #2e7d32; font-weight: 600; }
+.log-table .st-err { color: #d32f2f; font-weight: 600; }
+.log-empty {
+  margin-top: 10px;
+  font-size: 12px;
+  color: #999;
+  padding: 8px;
 }
 
 /* 查询 */
@@ -709,7 +850,7 @@ function exportExcel() {
   background: #fff;
 }
 .query-item input[type="date"] {
-  width: 130px;
+  width: 140px;
 }
 .query-item select {
   min-width: 120px;
