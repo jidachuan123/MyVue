@@ -398,7 +398,9 @@ function buildRows(momData, yoyData) {
 }
 
 function subtotal(grpRows, name) {
-  function sum(k) { return grpRows.reduce(function (t, r) { return t + (r[k] || 0); }, 0); }
+  // 巨野便利店配送中心(1102911)为配送中心，不当门店，整行不进门店合计
+  const calc = grpRows.filter(function (r) { return String(r.code) !== '1102911'; });
+  function sum(k) { return calc.reduce(function (t, r) { return t + (r[k] || 0); }, 0); }
   const sales = sum('sales'), profit = sum('profit'), cust = sum('cust');
   const ys = sum('yoy_sales'), yp = sum('yoy_profit'), yc = sum('yoy_cust');
   const ms = sum('mom_sales'), mp = sum('mom_profit'), mc = sum('mom_cust');
