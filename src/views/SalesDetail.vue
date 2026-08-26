@@ -111,6 +111,32 @@ function resetForm() {
   apiError.value = ''
 }
 
+// ========== 发送日报（手动触发截图 + 邮件，使用当前页面查询条件） ==========
+const sendingReport = ref(false)
+async function sendReport() {
+  if (!confirm('确定要生成「部门销售详情1」截图并发送邮件吗？\n将使用当前页面的查询条件（机构编码/部门层级/日期）。')) {
+    return
+  }
+  sendingReport.value = true
+  try {
+    const res = await request.post('/provider/sales/report/detail1/trigger', {
+      orgCode: queryForm.value.orgCode,
+      deptLevels: queryForm.value.deptLevels,
+      startDate: queryForm.value.startDate,
+      endDate: queryForm.value.endDate,
+      cmpStartDate: queryForm.value.cmpStartDate,
+      cmpEndDate: queryForm.value.cmpEndDate,
+      yoyStartDate: queryForm.value.yoyStartDate,
+      yoyEndDate: queryForm.value.yoyEndDate
+    })
+    alert(res.result || '执行完成')
+  } catch (err) {
+    alert('发送失败：' + (err.message || '未知错误'))
+  } finally {
+    sendingReport.value = false
+  }
+}
+
 // 页面进入时自动加载一次（直接展示后端真实数据，不再有写死数据兜底）
 onMounted(fetchData)
 
@@ -508,6 +534,9 @@ function exportExcel() {
             {{ apiLoading ? '查询中...' : '查询' }}
           </button>
           <button class="btn-default" @click="resetForm">重置</button>
+          <button class="btn-report" @click="sendReport" :disabled="sendingReport">
+            {{ sendingReport ? '发送中...' : '发送日报' }}
+          </button>
           <button class="btn-export" @click="exportExcel">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -761,6 +790,18 @@ function exportExcel() {
   transition: background .2s;
 }
 .btn-export:hover { background: #73d13d; }
+.btn-report {
+  background: #fa8c16;
+  color: #fff;
+  border: none;
+  padding: 6px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background .2s;
+}
+.btn-report:hover { background: #ffa940; }
+.btn-report:disabled { background: #ffc069; cursor: not-allowed; }
 
 /* 表格 */
 .table-wrapper {
