@@ -266,12 +266,10 @@ function fmtDate(d) {
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
 function getGroup(code) {
+  // 分组：按机构编码前四位归类（1101/1102/1103/1104…，前四位相同即同组），与 SalesDetail2.vue 同源
   const c = String(code);
-  if (c.startsWith('1101') || c.startsWith('1191')) return 'A巨野中心店组';
-  if (c.startsWith('1102')) return 'B便利组';
-  return 'C其他';
+  return c.length >= 4 ? c.slice(0, 4) : (c || '其他');
 }
-function groupName(g) { return g.replace(/^[ABC]/, ''); }
 
 /* ================== 默认日期（动态计算，不写死） ==================
    规则：本期 = 当天的前一天；环比 = 当天的前两天（本期前一天）；同比 = 去年的今天 */
@@ -419,11 +417,13 @@ function buildRows(momData, yoyData) {
       group: getGroup(s.code)
     });
   }
+  // 按机构编码升序（前四位相同即同组，升序后同组自然连续）
   rows.sort(function (a, b) { return a.code < b.code ? -1 : 1; });
   return rows;
 }
 
-function subtotal(grpRows, name) {
+function subtotal(grpRows) {
+  // 合计行统一只叫「合计」（不带组名前缀，与 SalesDetail2.vue 同源）
   // 巨野便利店配送中心(1102911)为配送中心，不当门店，整行不进门店合计
   const calc = grpRows.filter(function (r) { return String(r.code) !== '1102911'; });
   function sum(k) { return calc.reduce(function (t, r) { return t + (r[k] || 0); }, 0); }
@@ -433,7 +433,7 @@ function subtotal(grpRows, name) {
   const ms = sum('mom_sales'), mp = sum('mom_profit'), mc = sum('mom_cust');
   const ap = avg(sales, cust), ay = avg(ys, yc), am = avg(ms, mc);
   return {
-    subtotal: true, name: name,
+    subtotal: true, name: '合计',
     sales: sales, profit: profit,
     stockAmount: stockAmount,
     profit_rate: profitRate(profit, sales),
@@ -450,16 +450,17 @@ function subtotal(grpRows, name) {
 }
 
 function arrange(rows) {
-  // 与 SalesDetail2.vue tableData 一致：巨野中心店组 / 便利组 / 其他 各段 + 段尾合计行（无全部合计）
-  const order = ['A巨野中心店组', 'B便利组', 'C其他'];
+  // 与 SalesDetail2.vue tableData 一致：按机构编码前四位分组（升序，如 1101、1102、1103、1104、1191…）+ 段尾「合计」行（无全部合计）
+  const groups = [];
+  for (const r of rows) { if (groups.indexOf(r.group) === -1) groups.push(r.group); }
+  groups.sort();
   const out = [];
   const counts = {};
-  for (const g of order) {
+  for (const g of groups) {
     const grp = rows.filter(function (r) { return r.group === g; });
-    if (!grp.length) continue;
-    counts[groupName(g)] = grp.length;
+    counts[g] = grp.length;
     for (const r of grp) out.push(r);
-    out.push(subtotal(grp, groupName(g) + ' 合计'));
+    out.push(subtotal(grp));
   }
   return { rows: out, counts: counts };
 }
@@ -554,9 +555,7 @@ async function query() {
       (orgCode ? ' ｜ 机构 ' + esc(orgCode) : '') +
       (department ? ' ｜ 部门 ' + esc(department) : '') +
       ' ｜ 门店数 ' + rows.length +
-      (counts['巨野中心店组'] ? '（巨野中心店组 ' + counts['巨野中心店组'] + ' 店、' : '') +
-      (counts['便利组'] ? '便利组 ' + counts['便利组'] + ' 店' : '') +
-      (counts['巨野中心店组'] || counts['便利组'] ? '）' : '');
+      (Object.keys(counts).length ? '（' + Object.keys(counts).map(function (g) { return g + ' ' + counts[g] + ' 店'; }).join('、') + '）' : '');
     setStatus('查询完成：共 ' + rows.length + ' 家机构。两页签数据已实时重建，可核对。', 'ok');
   } catch (e) {
     setStatus('查询失败：' + e.message + '（请确认后端服务已启动：eureka 8761 / provider 8001，以及前端 dev server 3001）', 'err');
