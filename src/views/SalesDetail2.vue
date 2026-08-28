@@ -50,6 +50,13 @@ function defaultQueryForm() {
 // 注意：填 deptLevels=3 时接口返回多层部门明细，交易笔数会被重复统计（约翻倍），勿用
 const queryForm = ref(defaultQueryForm())
 
+// ========== Union 特殊逻辑 ==========
+// 勾选后查询接口带 unionStockCodes，UNION ALL 追加这些「仅库存」门店（引擎未返回的补行，
+// 仅机构编码/机构名称/当日库存金额三列，其余按 0；引擎已返回的跳过防翻倍）。
+// 编码须与后端 application.yml 的 secondary.screenshots.sd2.union-stock-codes 保持一致。
+const UNION_STOCK_CODES = '1104901,1103801'
+const unionEnabled = ref(false)
+
 // ========== API 数据 ==========
 const apiLoading = ref(false)
 const apiError = ref('')
@@ -67,7 +74,8 @@ async function fetchData() {
       orgCode: queryForm.value.orgCode,
       showStore: '显示门店',
       deptLevels: queryForm.value.deptLevels,   // 留空则不发送（request.js 过滤空值，后端走默认口径）
-      department: queryForm.value.department
+      department: queryForm.value.department,
+      ...(unionEnabled.value ? { unionStockCodes: UNION_STOCK_CODES } : {})
     }
     // 环比调用：对比日期 = 环比开始/结束
     const momCmp = {
@@ -417,6 +425,12 @@ function exportExcel() {
         <div class="query-item">
           <label>部门编码:</label>
           <input type="text" v-model="queryForm.department" placeholder="留空=默认，1=超市" style="width:110px" />
+        </div>
+        <div class="query-item query-union" title="勾选后查询结果 UNION ALL 追加仅库存门店（1104901/1103801），引擎未返回的补行，其余指标按 0">
+          <label class="union-label" style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;">
+            <input type="checkbox" v-model="unionEnabled" style="margin:0;cursor:pointer;" />
+            <span style="white-space:nowrap;">Union特殊逻辑</span>
+          </label>
         </div>
         <div class="query-actions">
           <button class="btn-primary" @click="fetchData" :disabled="apiLoading">

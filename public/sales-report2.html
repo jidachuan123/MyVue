@@ -114,7 +114,11 @@ table.fml-table td, table.fml-table th { text-align:left; padding:7px 10px; }
       <span class="lbl">部门编码（留空=后端默认口径，1=超市）</span>
       <input type="text" id="department" placeholder="留空即可" style="width:80px">
     </div>
-    <div class="ctl-group" style="flex-direction:row; gap:8px;">
+    <div class="ctl-group" style="flex-direction:row; gap:8px; align-items:center;">
+      <label title="勾选后查询结果 UNION ALL 追加仅库存门店（1104901/1103801），引擎未返回的补行，其余指标按 0" style="display:inline-flex; align-items:center; gap:4px; cursor:pointer; white-space:nowrap; font-size:13px;">
+        <input type="checkbox" id="unionEnabled" style="margin:0; cursor:pointer;">
+        Union特殊逻辑
+      </label>
       <button class="btn btn-default" id="btnCalc">一键推算同比/环比</button>
       <button class="btn btn-primary" id="btnQuery">查询对照</button>
     </div>
@@ -312,6 +316,10 @@ document.getElementById('btnCalc').addEventListener('click', function () {
 });
 
 /* ================== 取数 ================== */
+// Union 特殊逻辑：勾选后接口 UNION ALL 追加「仅库存」门店（1104901/1103801），
+// 引擎未返回的补行（仅机构编码/机构名称/当日库存金额三列，其余按 0，前端 hasStock 防翻倍）。
+// 编码须与后端 application.yml 的 secondary.screenshots.sd2.union-stock-codes 保持一致。
+const UNION_STOCK_CODES = '1104901,1103801';
 async function fetchCmp(cmpStart, cmpEnd, extra) {
   const p = new URLSearchParams();
   p.set('tenantId', '8');
@@ -324,6 +332,7 @@ async function fetchCmp(cmpStart, cmpEnd, extra) {
   if (dl) p.set('deptLevels', dl);
   if (extra.orgCode) p.set('orgCode', extra.orgCode);
   if (extra.department) p.set('department', extra.department);
+  if (document.getElementById('unionEnabled').checked) p.set('unionStockCodes', UNION_STOCK_CODES);
   const res = await fetch('/api/provider/sales/detail?' + p.toString());
   if (!res.ok) {
     const txt = await res.text().catch(() => '');
