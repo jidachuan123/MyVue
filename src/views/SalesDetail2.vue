@@ -19,25 +19,37 @@ import request from '../utils/request'
 // ============================================================
 
 // ========== 默认查询日期（动态计算，不写死） ==========
-// 规则：本期 = 当天的前一天；环比 = 当天的前两天（本期前一天）；同比 = 去年的今天
+// 规则：本期 = 当天的前一天；环比 = 当天的前两天（本期前一天）；
+//       同比 = 去年本期的今天（本期−1年），就近取与本期同周几的最近一天
+//       例：本期 2026-08-27 周四 → 去年本期 2025-08-27 周三 → 最近周四 = 2025-08-28
 function fmtDate(d) {
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
 }
+// 核心：本期日期 cur → 去年本期的今天(cur−1年)，就近取与 cur 同周几的最近一天（无平局：d≤3 往后、d≥4 往前）
+function calcYoySameDow(cur) {
+  const base = new Date(cur)
+  base.setFullYear(base.getFullYear() - 1)             // 去年本期的今天
+  let d = (cur.getDay() - base.getDay() + 7) % 7       // 从 base 到目标周几需 +d 天(0~6)
+  const yoy = new Date(base)
+  if (d <= 3) yoy.setDate(base.getDate() + d)          // 往后更近（含 d=0 即 base 本身）
+  else yoy.setDate(base.getDate() - (7 - d))           // 往前更近
+  return yoy
+}
 function defaultQueryForm() {
   const now = new Date()
   const prev = new Date(now); prev.setDate(now.getDate() - 1)      // 前一天 → 本期
   const prev2 = new Date(now); prev2.setDate(now.getDate() - 2)    // 前两天 → 环比
-  const lastYear = new Date(now); lastYear.setFullYear(now.getFullYear() - 1) // 去年的今天 → 同比
+  const yoy = calcYoySameDow(prev)                                 // 同比 = 去年本期就近同周几
   return {
     startDate: fmtDate(prev),      // 本期开始
     endDate: fmtDate(prev),        // 本期结束
     cmpStartDate: fmtDate(prev2),  // 环比对比开始
     cmpEndDate: fmtDate(prev2),    // 环比对比结束
-    yoyStartDate: fmtDate(lastYear), // 同比对比开始
-    yoyEndDate: fmtDate(lastYear),   // 同比对比结束
+    yoyStartDate: fmtDate(yoy),    // 同比对比开始
+    yoyEndDate: fmtDate(yoy),      // 同比对比结束
     orgCode: '1101,1102,1191001',  // 默认机构（1101 巨野组/1102 便利组/1191001），留空查全部
     deptLevels: '',               // 部门层级：留空=后端默认口径（正确，15,719）；1=超市；3=来客数翻倍(错)
     department: ''                // 部门编码：留空=后端默认口径（正确）；1=超市
