@@ -27,6 +27,7 @@ th { background:#f5f5f5; font-weight:600; position:sticky; top:0; z-index:5; }
 .col-profit { background:#e8f5e9 !important; }
 .col-customer { background:#e3f2fd !important; }
 .col-price { background:#fce4ec !important; }
+.col-stock { background:#f1f8e9 !important; }
 .col-yoy { background:#f3e5f5 !important; }
 .col-mom { background:#ede7f6 !important; }
 .subtotal { background:linear-gradient(90deg,#fff59d,#fff9c4) !important; font-weight:700; }
@@ -60,6 +61,7 @@ details.summary-card summary:hover { color:#1890ff; }
 .tag-blue { background:#e3f2fd; color:#1565c0; }
 .tag-orange { background:#fff3e0; color:#e65100; }
 .tag-green { background:#e8f5e9; color:#2e7d32; }
+.tag-stock { background:#f1f8e9; color:#33691e; }
 table.fml-table td, table.fml-table th { text-align:left; padding:7px 10px; }
 .fml-table td.c { font-family:'Consolas',monospace; color:#c0392b; }
 .backtop { float:right; font-size:12px; color:#1890ff; text-decoration:none; }
@@ -142,8 +144,10 @@ table.fml-table td, table.fml-table th { text-align:left; padding:7px 10px; }
 <!-- ========== 计算逻辑（可折叠） ========== -->
 <div class="card">
   <details class="summary-card">
-    <summary>② 计算逻辑 —— 25 列 Excel 公式 → 页面实现（点击展开）</summary>
+    <summary>② 计算逻辑 —— 26 列 Excel 公式 → 页面实现（点击展开）</summary>
     <div class="step" style="margin-top:10px;">
+      <span class="tag tag-stock">库存 1 列</span>
+      当日库存金额(Z) ← 接口 <span class="fml">当日库存金额</span>（本期当天实时快照，与查询期间无关）；环比调用已返回则用环比值，仅当环比未返回该店时用同比值补上（<span class="fml">hasStock 防翻倍</span>，与 SalesDetail2.vue / 后端截图服务同源）<br>
       <span class="tag tag-blue">本期 7 列</span>
       销售额(C) ← 接口 <span class="fml">销售金额</span>；毛利额(D) ← <span class="fml">含税毛利</span>；毛利率(E) = <span class="fml">D÷C</span>；来客数(F) ← <span class="fml">交易笔数</span>；客单价(G) = <span class="fml">C÷F</span><br>
       <span class="tag tag-orange">同比 5 列（H~L）</span>
@@ -159,13 +163,13 @@ table.fml-table td, table.fml-table th { text-align:left; padding:7px 10px; }
 
 <!-- ========== 第一页签 ========== -->
 <div class="card">
-  <h2>三、第一页签「各店每月销售同环比」完整数据（25 列）<a class="backtop" href="#top">↑ 顶部</a></h2>
+  <h2>三、第一页签「各店每月销售同环比」完整数据（26 列）<a class="backtop" href="#top">↑ 顶部</a></h2>
   <div class="note" id="sheet1Note">查询后自动生成。每组末尾为<b>黄色合计行</b>（合计=组内求和，毛利率/客单价/增长率按合计值套公式）。<span class="warn">口径提示：</span>「来客数」取接口「交易笔数」（Excel 示例的来客数口径不同，见下方说明）。</div>
   <div class="th-wrap">
     <table>
       <thead>
         <tr>
-          <th rowspan="2">机构代码</th><th rowspan="2">机构名称</th>
+          <th rowspan="2">机构代码</th><th rowspan="2">机构名称</th><th rowspan="2" class="col-stock">当日库存金额</th>
           <th colspan="2" class="col-sales">本期</th><th class="col-profit">毛利率</th>
           <th class="col-customer">来客数</th><th class="col-price">客单价</th>
           <th colspan="5" class="col-yoy">同比</th>
@@ -186,27 +190,27 @@ table.fml-table td, table.fml-table th { text-align:left; padding:7px 10px; }
           <th class="col-yoy">同比</th><th class="col-mom">环比</th>
         </tr>
       </thead>
-      <tbody id="sheet1Body"><tr><td colspan="25" style="color:#aaa;padding:20px;">尚未查询</td></tr></tbody>
+      <tbody id="sheet1Body"><tr><td colspan="26" style="color:#aaa;padding:20px;">尚未查询</td></tr></tbody>
     </table>
   </div>
 </div>
 
 <!-- ========== 第二页签 ========== -->
 <div class="card">
-  <h2>四、第二页签「各店每月最终取值」= 销售详情2 页面（15 列）<a class="backtop" href="#top">↑ 顶部</a></h2>
+  <h2>四、第二页签「各店每月最终取值」= 销售详情2 页面（16 列）<a class="backtop" href="#top">↑ 顶部</a></h2>
   <div class="note" id="sheet2Note">第二页签每一列都是<b>直接引用第一页签</b>（如 <span class="fml">=各店每月销售同环比!C4</span>）。下方即「销售详情2」页面的展示数据。</div>
   <div class="th-wrap">
     <table>
       <thead>
         <tr>
-          <th>机构代码</th><th>机构名称</th>
+          <th>机构代码</th><th>机构名称</th><th class="col-stock">当日库存金额</th>
           <th class="col-sales">销售额/元</th><th class="col-sales">同比<br>销售额增长率</th><th class="col-sales">环比<br>销售额增长率</th>
           <th class="col-profit">毛利额/元</th><th class="col-profit">同比<br>毛利额增长率</th><th class="col-profit">环比<br>毛利额增长率</th><th class="col-profit">毛利率</th>
           <th class="col-customer">来客数</th><th class="col-customer">同比<br>来客数增长率</th><th class="col-customer">环比<br>来客数增长率</th>
           <th class="col-price">客单价/元</th><th class="col-price">同比<br>客单价增长率</th><th class="col-price">环比<br>客单价增长率</th>
         </tr>
       </thead>
-      <tbody id="sheet2Body"><tr><td colspan="15" style="color:#aaa;padding:20px;">尚未查询</td></tr></tbody>
+      <tbody id="sheet2Body"><tr><td colspan="16" style="color:#aaa;padding:20px;">尚未查询</td></tr></tbody>
     </table>
   </div>
 </div>
@@ -219,7 +223,8 @@ table.fml-table td, table.fml-table th { text-align:left; padding:7px 10px; }
     2. <b>销售额/毛利额/同比环比/增长率</b>：接口 8/10 数据与 Excel 缓存一致（如 巨野中心店 销售额 490,232.55 两边完全相同）。<br>
     3. <span class="warn">「来客数 / 客单价」口径不同：</span>Excel 示例的来客数（如 巨野中心店 6,504）<b>不等于</b> 接口「交易笔数」（21,691），接口也<b>没有</b>独立的「来客数」字段。Excel 客单价 = 销售额÷Excel来客数（75.37 = 490,232.55÷6,504），而页面按指定映射「来客数→交易笔数」展示。<br>
     <b>若要完全对齐 Excel 的来客数/客单价，需提供该「来客数」的数据来源</b>，再调整映射。<br>
-    4. <b>机构清单差异</b>：不同日期门店营业状态不同，机构清单会随日期变化 —— 属正常。
+    4. <b>机构清单差异</b>：不同日期门店营业状态不同，机构清单会随日期变化 —— 属正常。<br>
+    5. <span class="warn">本对照工具刻意不隐藏「当日库存金额=0」的门店</span>：对照页是排查问题用的，全量展示（销售详情2 页面和日报截图会隐藏库存=0 的门店行，但库存值本身参与合计计算，两者数据一致）。
   </div>
 </div>
 
@@ -339,12 +344,16 @@ function buildRows(momData, yoyData) {
     const s = map[key] || {
       code: key, name: r['机构名称'] || '',
       sales: 0, profit: 0, cust: 0,
+      stockAmount: 0, hasStock: false,
       ms: 0, mp: 0, mc: 0,
       ys: 0, yp: 0, yc: 0
     };
     s.sales += num(r['销售金额']) || 0;
     s.profit += num(r['含税毛利']) || 0;
     s.cust += num(r['交易笔数']) || 0;
+    // 当日库存金额 = 本期当天实时库存快照：环比调用返回即赋值（与 SalesDetail2.vue 同源）
+    s.stockAmount += num(r['当日库存金额']) || 0;
+    s.hasStock = true;
     s.ms += num(r['对期销售金额']) || 0;
     s.mp += num(r['对期含税毛利']) || 0;
     s.mc += num(r['对期交易笔数']) || 0;
@@ -352,11 +361,27 @@ function buildRows(momData, yoyData) {
   }
   for (const r of yoyData) {
     const key = String(r['机构编码']);
-    const s = map[key];
-    if (!s) continue;
+    // 仅同比有销售的门店也要补建行（与页面/后端截图服务同源，防止漏店）
+    let s = map[key];
+    if (!s) {
+      s = {
+        code: key, name: r['机构名称'] || '',
+        sales: 0, profit: 0, cust: 0,
+        stockAmount: 0, hasStock: false,
+        ms: 0, mp: 0, mc: 0,
+        ys: 0, yp: 0, yc: 0
+      };
+      map[key] = s;
+    }
     s.ys += num(r['对期销售金额']) || 0;
     s.yp += num(r['对期含税毛利']) || 0;
     s.yc += num(r['对期交易笔数']) || 0;
+    // 库存与 cmp 无关：仅当环比调用未返回该店时用同比返回的库存补上，
+    // 已有库存则跳过，避免两个接口同一库存重复累加翻倍（与 SalesDetail2.vue 同源）
+    if (!s.hasStock) {
+      s.stockAmount += num(r['当日库存金额']) || 0;
+      s.hasStock = true;
+    }
   }
   const rows = [];
   for (const s of Object.values(map)) {
@@ -370,6 +395,7 @@ function buildRows(momData, yoyData) {
     rows.push({
       code: s.code, name: s.name,
       sales: sales, profit: profit,
+      stockAmount: s.stockAmount,
       profit_rate: profitRate(profit, sales),
       cust: cust, avg_price: avgCur,
       yoy_sales: s.ys ? s.ys : null,
@@ -402,12 +428,14 @@ function subtotal(grpRows, name) {
   const calc = grpRows.filter(function (r) { return String(r.code) !== '1102911'; });
   function sum(k) { return calc.reduce(function (t, r) { return t + (r[k] || 0); }, 0); }
   const sales = sum('sales'), profit = sum('profit'), cust = sum('cust');
+  const stockAmount = sum('stockAmount');
   const ys = sum('yoy_sales'), yp = sum('yoy_profit'), yc = sum('yoy_cust');
   const ms = sum('mom_sales'), mp = sum('mom_profit'), mc = sum('mom_cust');
   const ap = avg(sales, cust), ay = avg(ys, yc), am = avg(ms, mc);
   return {
     subtotal: true, name: name,
     sales: sales, profit: profit,
+    stockAmount: stockAmount,
     profit_rate: profitRate(profit, sales),
     cust: cust, avg_price: ap,
     yoy_sales: ys, yoy_profit: yp, yoy_cust: yc, yoy_avg: ay,
@@ -442,7 +470,9 @@ function sheet1Row(r) {
   const trCls = isSub ? ' class="subtotal"' : '';
   const codeTd = isSub ? '<td class="c-code"></td>' : '<td class="c-code">' + esc(r.code) + '</td>';
   const nameTd = isSub ? '<td class="c-name">' + esc(r.name) + '</td>' : '<td class="c-name">' + esc(r.name) + '</td>';
+  // 对照页不隐藏库存=0 的门店：排查用，全量展示（页面/截图是隐藏，本工具刻意不隐藏）
   return '<tr' + trCls + '>' + codeTd + nameTd +
+    '<td class="c-num col-stock">' + fmt(r.stockAmount) + '</td>' +
     '<td class="c-num col-sales">' + fmt(r.sales) + '</td>' +
     '<td class="c-num col-sales">' + fmt(r.profit) + '</td>' +
     '<td class="c-num col-profit">' + fmt(r.profit_rate) + '</td>' +
@@ -474,7 +504,9 @@ function sheet2Row(r) {
   const trCls = isSub ? ' class="subtotal"' : '';
   const codeTd = isSub ? '<td class="c-code"></td>' : '<td class="c-code">' + esc(r.code) + '</td>';
   const nameTd = isSub ? '<td class="c-name">' + esc(r.name) + '</td>' : '<td class="c-name">' + esc(r.name) + '</td>';
+  // 对照页不隐藏库存=0 的门店：排查用，全量展示（页面/截图是隐藏，本工具刻意不隐藏）
   return '<tr' + trCls + '>' + codeTd + nameTd +
+    '<td class="c-num col-stock">' + fmt(r.stockAmount) + '</td>' +
     '<td class="c-num col-sales">' + fmt(r.sales) + '</td>' +
     '<td class="c-num col-sales' + rateClass(r.yoy_sales_rate) + '">' + fmt(r.yoy_sales_rate, 2, true) + '</td>' +
     '<td class="c-num col-sales' + rateClass(r.mom_sales_rate) + '">' + fmt(r.mom_sales_rate, 2, true) + '</td>' +
