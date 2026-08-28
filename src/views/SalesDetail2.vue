@@ -227,7 +227,8 @@ const storeRows = computed(() => {
   // 派生指标（公式计算）
   const rows = []
   for (const it of map.values()) {
-    // 全 0 门店也占位显示：不再因 hasData=false 跳过，所有返回的机构都展示一行
+    // 全 0 门店也占位显示：所有门店都保留在 rows 中参与合计与百分比计算；
+    // 当日库存金额为 0 的门店仅在渲染层用 v-show 隐藏（不展示但参与计算，与后端截图服务同源）
     const avgPrice = avgPriceOf(it.sales, it.customers)
     const yoyAvgPrice = avgPriceOf(it.yoySales, it.yoyCustomers)
     const momAvgPrice = avgPriceOf(it.momSales, it.momCustomers)
@@ -486,8 +487,8 @@ function exportExcel() {
               <td :class="['col-rate', 'col-price', getRateClass(row.yoyAvgPriceRate)]">{{ formatRate(row.yoyAvgPriceRate) }}</td>
               <td :class="['col-rate', 'col-price', getRateClass(row.momAvgPriceRate)]">{{ formatRate(row.momAvgPriceRate) }}</td>
             </tr>
-            <!-- 各店行 -->
-            <tr v-else :class="{ 'odd': idx % 2 === 1 }">
+            <!-- 各店行：库存=0 的门店隐藏（v-show，仍参与合计计算） -->
+            <tr v-else v-show="row.stockAmount > 0" :class="{ 'odd': idx % 2 === 1 }">
               <td class="col-code">{{ row.orgCode }}</td>
               <td class="col-org">{{ row.orgName }}</td>
               <td class="col-num col-stock">{{ formatAmount(row.stockAmount) }}</td>
