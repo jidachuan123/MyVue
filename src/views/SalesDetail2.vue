@@ -185,7 +185,8 @@ const storeRows = computed(() => {
         sales: 0, profit: 0, customers: 0, stockAmount: 0, // 本期（含当日库存金额）
         momSales: 0, momProfit: 0, momCustomers: 0,        // 环比对期
         yoySales: 0, yoyProfit: 0, yoyCustomers: 0,        // 同比对期
-        hasData: false
+        hasData: false,
+        hasStock: false                                     // 库存是否已赋值（防 MOM/YOY 重复累加翻倍）
       })
     }
     return map.get(key)
@@ -200,6 +201,7 @@ const storeRows = computed(() => {
     it.profit += num(r['含税毛利']) || 0
     it.customers += num(r['交易笔数']) || 0
     it.stockAmount += num(r['当日库存金额']) || 0
+    it.hasStock = true
     it.momSales += num(r['对期销售金额']) || 0
     it.momProfit += num(r['对期含税毛利']) || 0
     it.momCustomers += num(r['对期交易笔数']) || 0
@@ -214,6 +216,12 @@ const storeRows = computed(() => {
     it.yoySales += num(r['对期销售金额']) || 0
     it.yoyProfit += num(r['对期含税毛利']) || 0
     it.yoyCustomers += num(r['对期交易笔数']) || 0
+    // 当日库存金额 = 本期当天实时库存快照（与 cmp 无关）：仅当环比调用未返回该店时用同比返回的库存补上，
+    // 已有库存则跳过，避免两个接口同一库存重复累加翻倍（与后端 SalesDetail2ReportService 同源）
+    if (!it.hasStock) {
+      it.stockAmount += num(r['当日库存金额']) || 0
+      it.hasStock = true
+    }
   }
 
   // 派生指标（公式计算）
