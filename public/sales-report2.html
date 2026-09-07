@@ -286,8 +286,11 @@ function fmtDate(d) {
 }
 function getGroup(code) {
   // 分组：按机构编码前四位归类（1101/1102/1103/1104…，前四位相同即同组），与 SalesDetail2.vue 同源
+  // 2026-09-07：1106 前缀门店并入 1104 组（归并映射，与页面/截图一致）
+  const ORG_GROUP_OVERRIDE = { '1106': '1104' };
   const c = String(code);
-  return c.length >= 4 ? c.slice(0, 4) : (c || '其他');
+  const p = c.length >= 4 ? c.slice(0, 4) : (c || '其他');
+  return ORG_GROUP_OVERRIDE[p] || p;
 }
 
 /* ================== 默认日期（动态计算，不写死） ==================

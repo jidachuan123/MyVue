@@ -153,9 +153,12 @@ function rate(cur, prior) {
 
 // ========== 机构分组：按机构编码前四位归类（1101/1102/1103/1104…，前四位相同即同组） ==========
 // 组顺序 = 前四位升序；每组组尾出合计行，合计行统一只叫「合计」（不带组名前缀）
+// 2026-09-07：新增 1106 前缀门店归并映射——1106 门店并入 1104 组展示与合计（与后端截图/对照页同源）
+const ORG_GROUP_OVERRIDE = { '1106': '1104' }
 function getGroup(code) {
   const s = String(code || '')
-  return s.length >= 4 ? s.slice(0, 4) : (s || '其他')
+  const p = s.length >= 4 ? s.slice(0, 4) : (s || '其他')
+  return ORG_GROUP_OVERRIDE[p] || p
 }
 
 // ========== 构建各店数据（按机构编码分组汇总） ==========
