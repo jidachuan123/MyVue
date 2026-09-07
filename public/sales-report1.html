@@ -20,23 +20,37 @@ h1 { font-size:20px; margin-bottom:6px; }
 .fml { font-family:'Consolas',monospace; font-size:12px; background:#fafafa; border:1px solid #eee; padding:2px 6px; border-radius:3px; color:#c0392b; }
 table { border-collapse:collapse; font-size:12px; width:100%; }
 .th-wrap { overflow-x:auto; }
-th, td { border:1px solid #e0e0e0; padding:6px 5px; text-align:center; white-space:nowrap; }
-th { background:#f5f5f5; font-weight:600; position:sticky; top:0; z-index:5; }
+/* 2026-09-07 二改：padding 收紧（6px 5px → 4px 3px）腾空间给数字放大，单元格不变大 */
+th, td { border:1px solid #000; padding:4px 3px; text-align:center; white-space:nowrap; line-height:1.25; }
+th { background:#fff; font-weight:700; position:sticky; top:0; z-index:5; font-size:13px; }
 .c-code { min-width:82px; }
 .c-name { min-width:170px; text-align:left !important; }
-.c-num { font-family:'Consolas','Segoe UI',monospace; }
-.col-sales { background:#fff3e0 !important; }
-.col-profit { background:#e8f5e9 !important; }
-.col-customer { background:#e3f2fd !important; }
-.col-price { background:#fce4ec !important; }
-.col-yoy { background:#f3e5f5 !important; }
-.col-mom { background:#ede7f6 !important; }
-.subtotal { background:linear-gradient(90deg,#fff59d,#fff9c4) !important; font-weight:700; }
-.subtotal td { border-top:2px solid #f57f17 !important; border-bottom:2px solid #f57f17 !important; }
-.total { background:linear-gradient(90deg,#ffd54f,#ffca28) !important; font-weight:800; }
-.total td { border-top:2px solid #e65100 !important; border-bottom:3px double #bf360c !important; }
-.rate-up { color:#d32f2f; font-weight:500; }
-.rate-down { color:#388e3c; font-weight:500; }
+/* 数字列 14→15px，等宽数字（tabular-nums）保证纵向小数点对齐 */
+.c-num { font-family:'Consolas','Segoe UI',monospace; font-size:15px; font-weight:500; font-variant-numeric:tabular-nums; }
+/* 2026-09-07 按用户 Excel 样图：5 个指标列（销售额/毛利额/毛利率/来客数/客单价）整列纯黄，增长率列白底 */
+.col-sales { background:#FFFF00 !important; }
+.col-profit { background:#FFFF00 !important; }
+.col-customer { background:#FFFF00 !important; }
+.col-price { background:#FFFF00 !important; }
+.col-yoy { background:#fff !important; }
+.col-mom { background:#fff !important; font-size:14px; font-variant-numeric:tabular-nums; }
+/* 小计行（部门合计）：淡青色背景 + 700 加粗 */
+.subtotal { background:#B8E0DC !important; font-weight:700; }
+.subtotal td { background:#B8E0DC !important; border-top:2px solid #000 !important; border-bottom:2px solid #000 !important; color:#1a1a1a !important; }
+/* 总计行（超市总计）：淡黄色背景（2026-09-07 四改：#D9B046 → 更淡的 #F2E1A6）+ 800 加粗 */
+.total { background:#F2E1A6 !important; font-weight:800; }
+.total td { background:#F2E1A6 !important; border-top:2px solid #000 !important; border-bottom:3px double #000 !important; color:#1a1a1a !important; }
+/* 合计行/总计行 数字加粗（2026-09-07 六改）：覆盖 .c-num 的 font-weight:500 */
+tr.subtotal td.c-num, tr.subtotal td .rate-num { font-weight:700 !important; }
+tr.total td.c-num, tr.total td .rate-num { font-weight:800 !important; }
+/* 增长率颜色（2026-09-07 五改）：仅箭头保留红/绿色；增长率数字统一黑色 */
+td.rate-up .rate-arrow { color:#2e7d32 !important; font-weight:600; }
+td.rate-up .rate-num { color:#1a1a1a; font-weight:600; }
+td.rate-down .rate-arrow { color:#c62828 !important; font-weight:600; }
+td.rate-down .rate-num { color:#1a1a1a; font-weight:600; }
+/* 增长率对齐（2026-09-07）：固定宽箭头 + 等宽右对齐数值，3 位/4 位数整列对齐 */
+.rate-arrow { display:inline-block; width:1em; text-align:center; }
+.rate-num { display:inline-block; min-width:4.6em; text-align:right; }
 /* ===== 控制区 ===== */
 .controls { display:flex; flex-wrap:wrap; gap:16px 28px; align-items:flex-end; }
 .ctl-group { display:flex; flex-direction:column; gap:4px; }
@@ -293,7 +307,11 @@ applyDefaultDates();
 /* ================== 格式化（与页面一致） ================== */
 function esc(s) { if (s === null || s === undefined) return ''; return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 function formatAmount(n) { if (n === undefined || n === null) return ''; return n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
-function formatRate(val) { if (val === undefined || val === null) return ''; const prefix = val > 0 ? '+' : ''; return prefix + Number(val).toFixed(2) + '%'; }
+function formatRate(val) { if (val === undefined || val === null) return ''; const arrow = val > 0 ? '▲ ' : (val < 0 ? '▼ ' : ''); const prefix = val > 0 ? '+' : ''; return arrow + prefix + Number(val).toFixed(2) + '%'; }
+function rateArrow(val) { if (val === undefined || val === null) return ''; return val > 0 ? '▲' : (val < 0 ? '▼' : ''); }
+function rateText(val) { if (val === undefined || val === null) return ''; const prefix = val > 0 ? '+' : ''; return prefix + Number(val).toFixed(2) + '%'; }
+/* 增长率拆分渲染（2026-09-07）：固定宽箭头 + 等宽右对齐数值，整列对齐 */
+function rateSpan(val) { return '<span class="rate-arrow">' + rateArrow(val) + '</span><span class="rate-num">' + rateText(val) + '</span>'; }
 function formatPct(val) { if (val === undefined || val === null) return ''; return val + '%'; }
 function getRateClass(val) { if (val === undefined || val === null) return ''; if (val > 0) return ' rate-up'; if (val < 0) return ' rate-down'; return ''; }
 
@@ -447,49 +465,49 @@ function renderTable(outRows) {
     if (r.isTotal) {
       return '<tr class="total"><td colspan="4" style="text-align:center;font-weight:800;letter-spacing:2px;">' + esc(r.deptName) + '</td>' +
         '<td class="c-num col-sales">' + formatAmount(r.salesAmount) + '</td>' +
-        '<td class="c-num col-yoy' + getRateClass(r.salesYoY) + '">' + formatRate(r.salesYoY) + '</td>' +
-        '<td class="c-num col-mom' + getRateClass(r.salesMoM) + '">' + formatRate(r.salesMoM) + '</td>' +
+        '<td class="c-num col-yoy' + getRateClass(r.salesYoY) + '">' + rateSpan(r.salesYoY) + '</td>' +
+        '<td class="c-num col-mom' + getRateClass(r.salesMoM) + '">' + rateSpan(r.salesMoM) + '</td>' +
         '<td class="c-num col-profit">' + formatAmount(r.profitAmount) + '</td>' +
-        '<td class="c-num col-yoy' + getRateClass(r.profitYoY) + '">' + formatRate(r.profitYoY) + '</td>' +
-        '<td class="c-num col-mom' + getRateClass(r.profitMoM) + '">' + formatRate(r.profitMoM) + '</td>' +
+        '<td class="c-num col-yoy' + getRateClass(r.profitYoY) + '">' + rateSpan(r.profitYoY) + '</td>' +
+        '<td class="c-num col-mom' + getRateClass(r.profitMoM) + '">' + rateSpan(r.profitMoM) + '</td>' +
         '<td class="c-num col-profit">' + formatPct(r.profitRate) + '</td>' +
         '<td class="c-num col-customer">' + formatAmount(r.customers) + '</td>' +
-        '<td class="c-num col-yoy' + getRateClass(r.customerYoY) + '">' + formatRate(r.customerYoY) + '</td>' +
-        '<td class="c-num col-mom' + getRateClass(r.customerMoM) + '">' + formatRate(r.customerMoM) + '</td>' +
+        '<td class="c-num col-yoy' + getRateClass(r.customerYoY) + '">' + rateSpan(r.customerYoY) + '</td>' +
+        '<td class="c-num col-mom' + getRateClass(r.customerMoM) + '">' + rateSpan(r.customerMoM) + '</td>' +
         '<td class="c-num col-price">' + formatAmount(r.avgPrice) + '</td>' +
-        '<td class="c-num col-yoy' + getRateClass(r.avgPriceYoY) + '">' + formatRate(r.avgPriceYoY) + '</td>' +
-        '<td class="c-num col-mom' + getRateClass(r.avgPriceMoM) + '">' + formatRate(r.avgPriceMoM) + '</td></tr>';
+        '<td class="c-num col-yoy' + getRateClass(r.avgPriceYoY) + '">' + rateSpan(r.avgPriceYoY) + '</td>' +
+        '<td class="c-num col-mom' + getRateClass(r.avgPriceMoM) + '">' + rateSpan(r.avgPriceMoM) + '</td></tr>';
     }
     if (r.isSubtotal) {
       return '<tr class="subtotal"><td colspan="4" style="text-align:center;font-weight:700;letter-spacing:2px;">' + esc(r.deptName) + '</td>' +
         '<td class="c-num col-sales">' + formatAmount(r.salesAmount) + '</td>' +
-        '<td class="c-num col-yoy' + getRateClass(r.salesYoY) + '">' + formatRate(r.salesYoY) + '</td>' +
-        '<td class="c-num col-mom' + getRateClass(r.salesMoM) + '">' + formatRate(r.salesMoM) + '</td>' +
+        '<td class="c-num col-yoy' + getRateClass(r.salesYoY) + '">' + rateSpan(r.salesYoY) + '</td>' +
+        '<td class="c-num col-mom' + getRateClass(r.salesMoM) + '">' + rateSpan(r.salesMoM) + '</td>' +
         '<td class="c-num col-profit">' + formatAmount(r.profitAmount) + '</td>' +
-        '<td class="c-num col-yoy' + getRateClass(r.profitYoY) + '">' + formatRate(r.profitYoY) + '</td>' +
-        '<td class="c-num col-mom' + getRateClass(r.profitMoM) + '">' + formatRate(r.profitMoM) + '</td>' +
+        '<td class="c-num col-yoy' + getRateClass(r.profitYoY) + '">' + rateSpan(r.profitYoY) + '</td>' +
+        '<td class="c-num col-mom' + getRateClass(r.profitMoM) + '">' + rateSpan(r.profitMoM) + '</td>' +
         '<td class="c-num col-profit">' + formatPct(r.profitRate) + '</td>' +
         '<td class="c-num col-customer">' + formatAmount(r.customers) + '</td>' +
-        '<td class="c-num col-yoy' + getRateClass(r.customerYoY) + '">' + formatRate(r.customerYoY) + '</td>' +
-        '<td class="c-num col-mom' + getRateClass(r.customerMoM) + '">' + formatRate(r.customerMoM) + '</td>' +
+        '<td class="c-num col-yoy' + getRateClass(r.customerYoY) + '">' + rateSpan(r.customerYoY) + '</td>' +
+        '<td class="c-num col-mom' + getRateClass(r.customerMoM) + '">' + rateSpan(r.customerMoM) + '</td>' +
         '<td class="c-num col-price">' + formatAmount(r.avgPrice) + '</td>' +
-        '<td class="c-num col-yoy' + getRateClass(r.avgPriceYoY) + '">' + formatRate(r.avgPriceYoY) + '</td>' +
-        '<td class="c-num col-mom' + getRateClass(r.avgPriceMoM) + '">' + formatRate(r.avgPriceMoM) + '</td></tr>';
+        '<td class="c-num col-yoy' + getRateClass(r.avgPriceYoY) + '">' + rateSpan(r.avgPriceYoY) + '</td>' +
+        '<td class="c-num col-mom' + getRateClass(r.avgPriceMoM) + '">' + rateSpan(r.avgPriceMoM) + '</td></tr>';
     }
     return '<tr><td>' + esc(r.orgName) + '</td><td>' + esc(r.deptGroup) + '</td><td class="c-code">' + esc(r.deptCode) + '</td><td class="c-name">' + esc(r.deptName) + '</td>' +
       '<td class="c-num col-sales">' + formatAmount(r.salesAmount) + '</td>' +
-      '<td class="c-num col-yoy' + getRateClass(r.salesYoY) + '">' + formatRate(r.salesYoY) + '</td>' +
-      '<td class="c-num col-mom' + getRateClass(r.salesMoM) + '">' + formatRate(r.salesMoM) + '</td>' +
+      '<td class="c-num col-yoy' + getRateClass(r.salesYoY) + '">' + rateSpan(r.salesYoY) + '</td>' +
+      '<td class="c-num col-mom' + getRateClass(r.salesMoM) + '">' + rateSpan(r.salesMoM) + '</td>' +
       '<td class="c-num col-profit">' + formatAmount(r.profitAmount) + '</td>' +
-      '<td class="c-num col-yoy' + getRateClass(r.profitYoY) + '">' + formatRate(r.profitYoY) + '</td>' +
-      '<td class="c-num col-mom' + getRateClass(r.profitMoM) + '">' + formatRate(r.profitMoM) + '</td>' +
+      '<td class="c-num col-yoy' + getRateClass(r.profitYoY) + '">' + rateSpan(r.profitYoY) + '</td>' +
+      '<td class="c-num col-mom' + getRateClass(r.profitMoM) + '">' + rateSpan(r.profitMoM) + '</td>' +
       '<td class="c-num col-profit">' + formatPct(r.profitRate) + '</td>' +
       '<td class="c-num col-customer">' + formatAmount(r.customers) + '</td>' +
-      '<td class="c-num col-yoy' + getRateClass(r.customerYoY) + '">' + formatRate(r.customerYoY) + '</td>' +
-      '<td class="c-num col-mom' + getRateClass(r.customerMoM) + '">' + formatRate(r.customerMoM) + '</td>' +
+      '<td class="c-num col-yoy' + getRateClass(r.customerYoY) + '">' + rateSpan(r.customerYoY) + '</td>' +
+      '<td class="c-num col-mom' + getRateClass(r.customerMoM) + '">' + rateSpan(r.customerMoM) + '</td>' +
       '<td class="c-num col-price">' + formatAmount(r.avgPrice) + '</td>' +
-      '<td class="c-num col-yoy' + getRateClass(r.avgPriceYoY) + '">' + formatRate(r.avgPriceYoY) + '</td>' +
-      '<td class="c-num col-mom' + getRateClass(r.avgPriceMoM) + '">' + formatRate(r.avgPriceMoM) + '</td></tr>';
+      '<td class="c-num col-yoy' + getRateClass(r.avgPriceYoY) + '">' + rateSpan(r.avgPriceYoY) + '</td>' +
+      '<td class="c-num col-mom' + getRateClass(r.avgPriceMoM) + '">' + rateSpan(r.avgPriceMoM) + '</td></tr>';
   });
   document.getElementById('tabBody').innerHTML = html.join('');
 }

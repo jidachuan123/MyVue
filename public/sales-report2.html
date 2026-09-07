@@ -18,20 +18,23 @@ h1 { font-size:20px; margin-bottom:6px; }
 .fml { font-family:'Consolas',monospace; font-size:12px; background:#fafafa; border:1px solid #eee; padding:2px 6px; border-radius:3px; color:#c0392b; }
 table { border-collapse:collapse; font-size:12px; width:100%; }
 .th-wrap { overflow-x:auto; }
-th, td { border:1px solid #e0e0e0; padding:6px 5px; text-align:center; white-space:nowrap; }
-th { background:#f5f5f5; font-weight:600; position:sticky; top:0; z-index:5; }
+th, td { border:1px solid #000; padding:6px 5px; text-align:center; white-space:nowrap; }
+th { background:#fff; font-weight:700; position:sticky; top:0; z-index:5; }
 .c-code { min-width:82px; }
 .c-name { min-width:170px; text-align:left !important; }
 .c-num { font-family:'Consolas','Segoe UI',monospace; }
-.col-sales { background:#fff3e0 !important; }
-.col-profit { background:#e8f5e9 !important; }
-.col-customer { background:#e3f2fd !important; }
-.col-price { background:#fce4ec !important; }
-.col-stock { background:#f1f8e9 !important; }
-.col-yoy { background:#f3e5f5 !important; }
-.col-mom { background:#ede7f6 !important; }
-.subtotal { background:linear-gradient(90deg,#fff59d,#fff9c4) !important; font-weight:700; }
-.subtotal td { border-top:2px solid #f57f17 !important; border-bottom:2px solid #f57f17 !important; }
+/* 2026-09-06 按用户 Excel 样图：5 个指标列（销售额/毛利额/毛利率/来客数/客单价）整列纯黄，库存金额与增长率列白底 */
+/* 页签2 值列与增长率列共用 col-* 类，用 :not(.rate-up):not(.rate-down) 只命中值单元格；合计行整体白底 */
+tr:not(.subtotal) > td.c-num.col-sales:not(.rate-up):not(.rate-down),
+tr:not(.subtotal) > td.c-num.col-profit:not(.rate-up):not(.rate-down),
+tr:not(.subtotal) > td.c-num.col-customer:not(.rate-up):not(.rate-down),
+tr:not(.subtotal) > td.c-num.col-price:not(.rate-up):not(.rate-down) { background:#FFFF00 !important; }
+.col-y { background:#FFFF00 !important; }
+.col-stock { background:#fff !important; }
+.col-yoy { background:#fff !important; }
+.col-mom { background:#fff !important; }
+.subtotal { background:#fff !important; font-weight:700; }
+.subtotal td { background:#fff !important; border-top:2px solid #000 !important; border-bottom:2px solid #000 !important; }
 .rate-up { color:#d32f2f; font-weight:500; }
 .rate-down { color:#388e3c; font-weight:500; }
 /* ===== 控制区 ===== */
@@ -174,8 +177,8 @@ table.fml-table td, table.fml-table th { text-align:left; padding:7px 10px; }
       <thead>
         <tr>
           <th rowspan="2">机构代码</th><th rowspan="2">机构名称</th><th rowspan="2" class="col-stock">当日库存金额</th>
-          <th colspan="2" class="col-sales">本期</th><th class="col-profit">毛利率</th>
-          <th class="col-customer">来客数</th><th class="col-price">客单价</th>
+          <th colspan="2" class="col-sales col-y">本期</th><th class="col-profit col-y">毛利率</th>
+          <th class="col-customer col-y">来客数</th><th class="col-price col-y">客单价</th>
           <th colspan="5" class="col-yoy">同比</th>
           <th colspan="5" class="col-mom">环比</th>
           <th colspan="2" class="col-sales">销售额增长率</th>
@@ -184,8 +187,8 @@ table.fml-table td, table.fml-table th { text-align:left; padding:7px 10px; }
           <th colspan="2" class="col-price">客单价增长率</th>
         </tr>
         <tr>
-          <th class="col-sales">销售额</th><th class="col-sales">毛利额</th><th class="col-profit">毛利率</th>
-          <th class="col-customer">来客数</th><th class="col-price">客单价</th>
+          <th class="col-sales col-y">销售额</th><th class="col-sales col-y">毛利额</th><th class="col-profit col-y">毛利率</th>
+          <th class="col-customer col-y">来客数</th><th class="col-price col-y">客单价</th>
           <th class="col-yoy">销售额</th><th class="col-yoy">毛利额</th><th class="col-yoy">毛利率</th><th class="col-yoy">来客数</th><th class="col-yoy">客单价</th>
           <th class="col-mom">销售额</th><th class="col-mom">毛利额</th><th class="col-mom">毛利率</th><th class="col-mom">来客数</th><th class="col-mom">客单价</th>
           <th class="col-yoy">同比</th><th class="col-mom">环比</th>
@@ -208,10 +211,10 @@ table.fml-table td, table.fml-table th { text-align:left; padding:7px 10px; }
       <thead>
         <tr>
           <th>机构代码</th><th>机构名称</th><th class="col-stock">当日库存金额</th>
-          <th class="col-sales">销售额/元</th><th class="col-sales">同比<br>销售额增长率</th><th class="col-sales">环比<br>销售额增长率</th>
-          <th class="col-profit">毛利额/元</th><th class="col-profit">同比<br>毛利额增长率</th><th class="col-profit">环比<br>毛利额增长率</th><th class="col-profit">毛利率</th>
-          <th class="col-customer">来客数</th><th class="col-customer">同比<br>来客数增长率</th><th class="col-customer">环比<br>来客数增长率</th>
-          <th class="col-price">客单价/元</th><th class="col-price">同比<br>客单价增长率</th><th class="col-price">环比<br>客单价增长率</th>
+          <th class="col-sales col-y">销售额/元</th><th class="col-sales">同比<br>销售额增长率</th><th class="col-sales">环比<br>销售额增长率</th>
+          <th class="col-profit col-y">毛利额/元</th><th class="col-profit">同比<br>毛利额增长率</th><th class="col-profit">环比<br>毛利额增长率</th><th class="col-profit col-y">毛利率</th>
+          <th class="col-customer col-y">来客数</th><th class="col-customer">同比<br>来客数增长率</th><th class="col-customer">环比<br>来客数增长率</th>
+          <th class="col-price col-y">客单价/元</th><th class="col-price">同比<br>客单价增长率</th><th class="col-price">环比<br>客单价增长率</th>
         </tr>
       </thead>
       <tbody id="sheet2Body"><tr><td colspan="16" style="color:#aaa;padding:20px;">尚未查询</td></tr></tbody>

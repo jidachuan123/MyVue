@@ -111,32 +111,6 @@ function resetForm() {
   apiError.value = ''
 }
 
-// ========== 发送日报（手动触发截图 + 邮件，使用当前页面查询条件） ==========
-const sendingReport = ref(false)
-async function sendReport() {
-  if (!confirm('确定要生成「部门销售详情1」截图并发送邮件吗？\n将使用当前页面的查询条件（机构编码/部门层级/日期）。')) {
-    return
-  }
-  sendingReport.value = true
-  try {
-    const res = await request.post('/provider/sales/report/detail1/trigger', {
-      orgCode: queryForm.value.orgCode,
-      deptLevels: queryForm.value.deptLevels,
-      startDate: queryForm.value.startDate,
-      endDate: queryForm.value.endDate,
-      cmpStartDate: queryForm.value.cmpStartDate,
-      cmpEndDate: queryForm.value.cmpEndDate,
-      yoyStartDate: queryForm.value.yoyStartDate,
-      yoyEndDate: queryForm.value.yoyEndDate
-    })
-    alert(res.result || '执行完成')
-  } catch (err) {
-    alert('发送失败：' + (err.message || '未知错误'))
-  } finally {
-    sendingReport.value = false
-  }
-}
-
 // 页面进入时自动加载一次（直接展示后端真实数据，不再有写死数据兜底）
 onMounted(fetchData)
 
@@ -393,6 +367,18 @@ function formatAmount(n) {
 }
 function formatRate(val) {
   if (val === undefined || val === null) return ''
+  const arrow = val > 0 ? '▲ ' : (val < 0 ? '▼ ' : '')
+  const prefix = val > 0 ? '+' : ''
+  return arrow + prefix + Number(val).toFixed(2) + '%'
+}
+// 增长率拆分渲染（2026-09-07）：箭头与数值分开，配合 .rate-arrow/.rate-num
+// 实现整列对齐。formatRate 仍保留给 CSV 导出使用（带箭头的完整文本）
+function rateArrow(val) {
+  if (val === undefined || val === null) return ''
+  return val > 0 ? '▲' : (val < 0 ? '▼' : '')
+}
+function rateText(val) {
+  if (val === undefined || val === null) return ''
   const prefix = val > 0 ? '+' : ''
   return prefix + Number(val).toFixed(2) + '%'
 }
@@ -534,9 +520,6 @@ function exportExcel() {
             {{ apiLoading ? '查询中...' : '查询' }}
           </button>
           <button class="btn-default" @click="resetForm">重置</button>
-          <button class="btn-report" @click="sendReport" :disabled="sendingReport">
-            {{ sendingReport ? '发送中...' : '发送日报' }}
-          </button>
           <button class="btn-export" @click="exportExcel">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -580,35 +563,35 @@ function exportExcel() {
             <tr v-if="row.isSubtotal" class="subtotal">
               <td colspan="4" class="col-merge subtotal-label">{{ row.deptName }}</td>
               <td class="col-num col-sales">{{ formatAmount(row.salesAmount) }}</td>
-              <td :class="['col-rate', 'col-sales', getRateClass(row.salesYoY)]" v-if="showYoY">{{ formatRate(row.salesYoY) }}</td>
-              <td :class="['col-rate', 'col-sales', getRateClass(row.salesMoM)]" v-if="showMoM">{{ formatRate(row.salesMoM) }}</td>
+              <td :class="['col-rate', 'col-sales', getRateClass(row.salesYoY)]" v-if="showYoY"><span class="rate-arrow">{{ rateArrow(row.salesYoY) }}</span><span class="rate-num">{{ rateText(row.salesYoY) }}</span></td>
+              <td :class="['col-rate', 'col-sales', getRateClass(row.salesMoM)]" v-if="showMoM"><span class="rate-arrow">{{ rateArrow(row.salesMoM) }}</span><span class="rate-num">{{ rateText(row.salesMoM) }}</span></td>
               <td class="col-num col-profit">{{ formatAmount(row.profitAmount) }}</td>
-              <td :class="['col-rate', 'col-profit', getRateClass(row.profitYoY)]" v-if="showYoY">{{ formatRate(row.profitYoY) }}</td>
-              <td :class="['col-rate', 'col-profit', getRateClass(row.profitMoM)]" v-if="showMoM">{{ formatRate(row.profitMoM) }}</td>
+              <td :class="['col-rate', 'col-profit', getRateClass(row.profitYoY)]" v-if="showYoY"><span class="rate-arrow">{{ rateArrow(row.profitYoY) }}</span><span class="rate-num">{{ rateText(row.profitYoY) }}</span></td>
+              <td :class="['col-rate', 'col-profit', getRateClass(row.profitMoM)]" v-if="showMoM"><span class="rate-arrow">{{ rateArrow(row.profitMoM) }}</span><span class="rate-num">{{ rateText(row.profitMoM) }}</span></td>
               <td class="col-num col-profit">{{ formatPct(row.profitRate) }}</td>
               <td class="col-num col-customer">{{ formatAmount(row.customers) }}</td>
-              <td :class="['col-rate', 'col-customer', getRateClass(row.customerYoY)]" v-if="showYoY">{{ formatRate(row.customerYoY) }}</td>
-              <td :class="['col-rate', 'col-customer', getRateClass(row.customerMoM)]" v-if="showMoM">{{ formatRate(row.customerMoM) }}</td>
+              <td :class="['col-rate', 'col-customer', getRateClass(row.customerYoY)]" v-if="showYoY"><span class="rate-arrow">{{ rateArrow(row.customerYoY) }}</span><span class="rate-num">{{ rateText(row.customerYoY) }}</span></td>
+              <td :class="['col-rate', 'col-customer', getRateClass(row.customerMoM)]" v-if="showMoM"><span class="rate-arrow">{{ rateArrow(row.customerMoM) }}</span><span class="rate-num">{{ rateText(row.customerMoM) }}</span></td>
               <td class="col-num col-price">{{ formatAmount(row.avgPrice) }}</td>
-              <td :class="['col-rate', 'col-price', getRateClass(row.avgPriceYoY)]" v-if="showYoY">{{ formatRate(row.avgPriceYoY) }}</td>
-              <td :class="['col-rate', 'col-price', getRateClass(row.avgPriceMoM)]" v-if="showMoM">{{ formatRate(row.avgPriceMoM) }}</td>
+              <td :class="['col-rate', 'col-price', getRateClass(row.avgPriceYoY)]" v-if="showYoY"><span class="rate-arrow">{{ rateArrow(row.avgPriceYoY) }}</span><span class="rate-num">{{ rateText(row.avgPriceYoY) }}</span></td>
+              <td :class="['col-rate', 'col-price', getRateClass(row.avgPriceMoM)]" v-if="showMoM"><span class="rate-arrow">{{ rateArrow(row.avgPriceMoM) }}</span><span class="rate-num">{{ rateText(row.avgPriceMoM) }}</span></td>
             </tr>
             <!-- 总计行 -->
             <tr v-else-if="row.isTotal" class="total">
               <td colspan="4" class="col-merge total-label">{{ row.deptName }}</td>
               <td class="col-num col-sales">{{ formatAmount(row.salesAmount) }}</td>
-              <td :class="['col-rate', 'col-sales', getRateClass(row.salesYoY)]" v-if="showYoY">{{ formatRate(row.salesYoY) }}</td>
-              <td :class="['col-rate', 'col-sales', getRateClass(row.salesMoM)]" v-if="showMoM">{{ formatRate(row.salesMoM) }}</td>
+              <td :class="['col-rate', 'col-sales', getRateClass(row.salesYoY)]" v-if="showYoY"><span class="rate-arrow">{{ rateArrow(row.salesYoY) }}</span><span class="rate-num">{{ rateText(row.salesYoY) }}</span></td>
+              <td :class="['col-rate', 'col-sales', getRateClass(row.salesMoM)]" v-if="showMoM"><span class="rate-arrow">{{ rateArrow(row.salesMoM) }}</span><span class="rate-num">{{ rateText(row.salesMoM) }}</span></td>
               <td class="col-num col-profit">{{ formatAmount(row.profitAmount) }}</td>
-              <td :class="['col-rate', 'col-profit', getRateClass(row.profitYoY)]" v-if="showYoY">{{ formatRate(row.profitYoY) }}</td>
-              <td :class="['col-rate', 'col-profit', getRateClass(row.profitMoM)]" v-if="showMoM">{{ formatRate(row.profitMoM) }}</td>
+              <td :class="['col-rate', 'col-profit', getRateClass(row.profitYoY)]" v-if="showYoY"><span class="rate-arrow">{{ rateArrow(row.profitYoY) }}</span><span class="rate-num">{{ rateText(row.profitYoY) }}</span></td>
+              <td :class="['col-rate', 'col-profit', getRateClass(row.profitMoM)]" v-if="showMoM"><span class="rate-arrow">{{ rateArrow(row.profitMoM) }}</span><span class="rate-num">{{ rateText(row.profitMoM) }}</span></td>
               <td class="col-num col-profit">{{ formatPct(row.profitRate) }}</td>
               <td class="col-num col-customer">{{ formatAmount(row.customers) }}</td>
-              <td :class="['col-rate', 'col-customer', getRateClass(row.customerYoY)]" v-if="showYoY">{{ formatRate(row.customerYoY) }}</td>
-              <td :class="['col-rate', 'col-customer', getRateClass(row.customerMoM)]" v-if="showMoM">{{ formatRate(row.customerMoM) }}</td>
+              <td :class="['col-rate', 'col-customer', getRateClass(row.customerYoY)]" v-if="showYoY"><span class="rate-arrow">{{ rateArrow(row.customerYoY) }}</span><span class="rate-num">{{ rateText(row.customerYoY) }}</span></td>
+              <td :class="['col-rate', 'col-customer', getRateClass(row.customerMoM)]" v-if="showMoM"><span class="rate-arrow">{{ rateArrow(row.customerMoM) }}</span><span class="rate-num">{{ rateText(row.customerMoM) }}</span></td>
               <td class="col-num col-price">{{ formatAmount(row.avgPrice) }}</td>
-              <td :class="['col-rate', 'col-price', getRateClass(row.avgPriceYoY)]" v-if="showYoY">{{ formatRate(row.avgPriceYoY) }}</td>
-              <td :class="['col-rate', 'col-price', getRateClass(row.avgPriceMoM)]" v-if="showMoM">{{ formatRate(row.avgPriceMoM) }}</td>
+              <td :class="['col-rate', 'col-price', getRateClass(row.avgPriceYoY)]" v-if="showYoY"><span class="rate-arrow">{{ rateArrow(row.avgPriceYoY) }}</span><span class="rate-num">{{ rateText(row.avgPriceYoY) }}</span></td>
+              <td :class="['col-rate', 'col-price', getRateClass(row.avgPriceMoM)]" v-if="showMoM"><span class="rate-arrow">{{ rateArrow(row.avgPriceMoM) }}</span><span class="rate-num">{{ rateText(row.avgPriceMoM) }}</span></td>
             </tr>
             <!-- 明细行 -->
             <tr v-else :class="{ 'odd': idx % 2 === 1 }">
@@ -617,18 +600,18 @@ function exportExcel() {
               <td class="col-code">{{ row.deptCode }}</td>
               <td class="col-name">{{ row.deptName }}</td>
               <td class="col-num col-sales">{{ formatAmount(row.salesAmount) }}</td>
-              <td :class="['col-rate', 'col-sales', getRateClass(row.salesYoY)]" v-if="showYoY">{{ formatRate(row.salesYoY) }}</td>
-              <td :class="['col-rate', 'col-sales', getRateClass(row.salesMoM)]" v-if="showMoM">{{ formatRate(row.salesMoM) }}</td>
+              <td :class="['col-rate', 'col-sales', getRateClass(row.salesYoY)]" v-if="showYoY"><span class="rate-arrow">{{ rateArrow(row.salesYoY) }}</span><span class="rate-num">{{ rateText(row.salesYoY) }}</span></td>
+              <td :class="['col-rate', 'col-sales', getRateClass(row.salesMoM)]" v-if="showMoM"><span class="rate-arrow">{{ rateArrow(row.salesMoM) }}</span><span class="rate-num">{{ rateText(row.salesMoM) }}</span></td>
               <td class="col-num col-profit">{{ formatAmount(row.profitAmount) }}</td>
-              <td :class="['col-rate', 'col-profit', getRateClass(row.profitYoY)]" v-if="showYoY">{{ formatRate(row.profitYoY) }}</td>
-              <td :class="['col-rate', 'col-profit', getRateClass(row.profitMoM)]" v-if="showMoM">{{ formatRate(row.profitMoM) }}</td>
+              <td :class="['col-rate', 'col-profit', getRateClass(row.profitYoY)]" v-if="showYoY"><span class="rate-arrow">{{ rateArrow(row.profitYoY) }}</span><span class="rate-num">{{ rateText(row.profitYoY) }}</span></td>
+              <td :class="['col-rate', 'col-profit', getRateClass(row.profitMoM)]" v-if="showMoM"><span class="rate-arrow">{{ rateArrow(row.profitMoM) }}</span><span class="rate-num">{{ rateText(row.profitMoM) }}</span></td>
               <td class="col-num col-profit">{{ formatPct(row.profitRate) }}</td>
               <td class="col-num col-customer">{{ formatAmount(row.customers) }}</td>
-              <td :class="['col-rate', 'col-customer', getRateClass(row.customerYoY)]" v-if="showYoY">{{ formatRate(row.customerYoY) }}</td>
-              <td :class="['col-rate', 'col-customer', getRateClass(row.customerMoM)]" v-if="showMoM">{{ formatRate(row.customerMoM) }}</td>
+              <td :class="['col-rate', 'col-customer', getRateClass(row.customerYoY)]" v-if="showYoY"><span class="rate-arrow">{{ rateArrow(row.customerYoY) }}</span><span class="rate-num">{{ rateText(row.customerYoY) }}</span></td>
+              <td :class="['col-rate', 'col-customer', getRateClass(row.customerMoM)]" v-if="showMoM"><span class="rate-arrow">{{ rateArrow(row.customerMoM) }}</span><span class="rate-num">{{ rateText(row.customerMoM) }}</span></td>
               <td class="col-num col-price">{{ formatAmount(row.avgPrice) }}</td>
-              <td :class="['col-rate', 'col-price', getRateClass(row.avgPriceYoY)]" v-if="showYoY">{{ formatRate(row.avgPriceYoY) }}</td>
-              <td :class="['col-rate', 'col-price', getRateClass(row.avgPriceMoM)]" v-if="showMoM">{{ formatRate(row.avgPriceMoM) }}</td>
+              <td :class="['col-rate', 'col-price', getRateClass(row.avgPriceYoY)]" v-if="showYoY"><span class="rate-arrow">{{ rateArrow(row.avgPriceYoY) }}</span><span class="rate-num">{{ rateText(row.avgPriceYoY) }}</span></td>
+              <td :class="['col-rate', 'col-price', getRateClass(row.avgPriceMoM)]" v-if="showMoM"><span class="rate-arrow">{{ rateArrow(row.avgPriceMoM) }}</span><span class="rate-num">{{ rateText(row.avgPriceMoM) }}</span></td>
             </tr>
           </template>
         </tbody>
@@ -652,7 +635,7 @@ function exportExcel() {
   text-align: center;
   padding: 20px 16px 12px;
   border-bottom: 1px solid #e8e8e8;
-  background: linear-gradient(135deg, #fff8e1 0%, #fffde7 100%);
+  background: #fff;
 }
 .page-header h2 {
   font-size: 18px;
@@ -674,11 +657,11 @@ function exportExcel() {
   font-weight: 500;
 }
 .tag.current {
-  background: #e3f2fd;
+  background: #fff;
   color: #1565c0;
 }
 .tag.loaded {
-  background: #e8f5e9;
+  background: #fff;
   color: #2e7d32;
 }
 .toggle-row {
@@ -709,7 +692,7 @@ function exportExcel() {
 .query-panel {
   padding: 14px 20px;
   border-bottom: 1px solid #e8e8e8;
-  background: #fafafa;
+  background: #fff;
 }
 .query-row {
   display: flex;
@@ -790,18 +773,6 @@ function exportExcel() {
   transition: background .2s;
 }
 .btn-export:hover { background: #73d13d; }
-.btn-report {
-  background: #fa8c16;
-  color: #fff;
-  border: none;
-  padding: 6px 14px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 13px;
-  transition: background .2s;
-}
-.btn-report:hover { background: #ffa940; }
-.btn-report:disabled { background: #ffc069; cursor: not-allowed; }
 
 /* 表格 */
 .table-wrapper {
@@ -815,30 +786,33 @@ function exportExcel() {
   font-size: 12px;
 }
 .sales-table thead th {
-  font-weight: 600;
+  font-weight: 700;
   padding: 8px 6px;
-  border: 2px solid #8c8c8c;
+  border: 2px solid #000;
   text-align: center;
   white-space: nowrap;
-  background: #f5f5f5;
+  background: #fff;
   color: #333;
   position: sticky;
   top: 0;
   z-index: 10;
 }
+/* 2026-09-07 二改：纵向/横向 padding 收紧（7px 6px → 5px 3px），
+   腾出的空间给数字放大字号用，保证单元格尺寸不变大 */
 .sales-table tbody td {
-  padding: 7px 6px;
-  border: 1.5px solid #bfbfbf;
+  padding: 5px 3px;
+  border: 1px solid #000;
   text-align: center;
+  line-height: 1.25;
 }
 .sales-table tbody tr:hover {
-  background: #e3f2fd;
+  background: #f5f5f5;
 }
 .sales-table tbody tr.odd {
-  background: #fafafa;
+  background: #fff;
 }
 .sales-table tbody tr.odd:hover {
-  background: #e3f2fd;
+  background: #f5f5f5;
 }
 
 /* 列宽 */
@@ -847,51 +821,84 @@ function exportExcel() {
 .col-code { min-width: 70px; }
 .col-name { min-width: 100px; text-align: left !important; padding-left: 10px !important; }
 .col-merge { text-align: center !important; font-weight: 700; font-size: 14px; letter-spacing: 2px; }
-.col-num { min-width: 85px; text-align: center !important; font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif; }
-.col-rate { min-width: 70px; }
+/* 数字列：字号 14→15px，开启等宽数字（tabular-nums）保证纵向小数点对齐 */
+.col-num { min-width: 85px; text-align: center !important; font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif; font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.col-rate { min-width: 88px; font-size: 14px; font-variant-numeric: tabular-nums; }
 
-/* 列分组颜色 */
-.col-sales { background: #fff3e0 !important; }
-.col-profit { background: #e8f5e9 !important; }
-.col-customer { background: #e3f2fd !important; }
-.col-price { background: #fce4ec !important; }
+/* 增长率对齐（2026-09-07）：拆成「固定宽箭头」+「等宽右对齐数值」两段，
+   使 3 位数（+25.30%）与 4 位数（+125.30%）的箭头位置、小数点、% 号全部对齐 */
+.rate-arrow { display: inline-block; width: 1em; text-align: center; }
+.rate-num { display: inline-block; min-width: 4.6em; text-align: right; }
 
-/* 小计行 */
+/* 列分组颜色（2026-09-07）：5 个指标列黄底，但「部门合计 / 总计」行不黄（叠加行色用）。
+   2026-09-07 二改：删除原先「tr.subtotal td, tr.total td = #fff」的覆盖规则——它优先级
+   高于 .subtotal td，导致行色被吞掉整行变白；现改为黄列排除 subtotal/total 行 */
+.sales-table tbody tr:not(.subtotal):not(.total) .col-num.col-sales,
+.sales-table tbody tr:not(.subtotal):not(.total) .col-num.col-profit,
+.sales-table tbody tr:not(.subtotal):not(.total) .col-num.col-customer,
+.sales-table tbody tr:not(.subtotal):not(.total) .col-num.col-price { background: #FFFF00 !important; }
+
+/* 小计行（部门合计）：淡青色背景 + 700 加粗 */
 .subtotal {
-  background: linear-gradient(90deg, #fff59d 0%, #fff9c4 100%) !important;
+  background: #B8E0DC !important;
   font-weight: 700;
 }
 .subtotal td {
-  border-top: 2px solid #f57f17 !important;
-  border-bottom: 2px solid #f57f17 !important;
-  color: #4e342e !important;
+  border-top: 2px solid #000 !important;
+  border-bottom: 2px solid #000 !important;
+  color: #1a1a1a !important;
+  background: #B8E0DC !important;
 }
 .subtotal:hover {
-  background: linear-gradient(90deg, #fff176 0%, #fff59d 100%) !important;
+  background: #A5D5CF !important;
+}
+.subtotal:hover td {
+  background: #A5D5CF !important;
 }
 
-/* 总计行 */
+/* 总计行（超市总计）：暗黄色背景 + 800 加粗 */
 .total {
-  background: linear-gradient(90deg, #ffd54f 0%, #ffca28 100%) !important;
-  color: #4e342e !important;
+  background: #F2E1A6 !important;
+  color: #1a1a1a !important;
   font-weight: 800;
 }
 .total td {
-  border-top: 2px solid #e65100 !important;
-  border-bottom: 3px double #bf360c !important;
-  color: #3e2723 !important;
+  border-top: 2px solid #000 !important;
+  border-bottom: 3px double #000 !important;
+  color: #1a1a1a !important;
+  background: #F2E1A6 !important;
 }
 .total:hover {
-  background: linear-gradient(90deg, #ffc107 0%, #ffb300 100%) !important;
+  background: #E7D48C !important;
+}
+.total:hover td {
+  background: #E7D48C !important;
 }
 
-/* 增长率颜色（中国股市惯例：涨红跌绿） */
-.rate-up {
-  color: #d32f2f;
-  font-weight: 500;
+/* 合计行/总计行 数字加粗（2026-09-07 六改）：覆盖 .col-num 的 font-weight:500，
+   否则 .col-num 直接规则会盖掉 tr 继承的 700/800，导致数字仍是中等字重 */
+.sales-table tr.subtotal td.col-num,
+.sales-table tr.subtotal td .rate-num { font-weight: 700 !important; }
+.sales-table tr.total td.col-num,
+.sales-table tr.total td .rate-num { font-weight: 800 !important; }
+
+/* 增长率颜色（2026-09-07 五改）：仅箭头保留红/绿色；增长率数字统一黑色，
+   避免列内文字花花绿绿影响阅读。箭头仍用 !important 顶住 .subtotal/.total
+   的 color:#1a1a1a !important，确保合计行/总计行的箭头不为黑 */
+.sales-table td.rate-up .rate-arrow {
+  color: #2e7d32 !important;
+  font-weight: 600;
 }
-.rate-down {
-  color: #388e3c;
-  font-weight: 500;
+.sales-table td.rate-up .rate-num {
+  color: #1a1a1a;
+  font-weight: 600;
+}
+.sales-table td.rate-down .rate-arrow {
+  color: #c62828 !important;
+  font-weight: 600;
+}
+.sales-table td.rate-down .rate-num {
+  color: #1a1a1a;
+  font-weight: 600;
 }
 </style>
