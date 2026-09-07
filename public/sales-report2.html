@@ -22,7 +22,8 @@ th, td { border:1px solid #000; padding:6px 5px; text-align:center; white-space:
 th { background:#fff; font-weight:700; position:sticky; top:0; z-index:5; }
 .c-code { min-width:82px; }
 .c-name { min-width:170px; text-align:left !important; }
-.c-num { font-family:'Consolas','Segoe UI',monospace; font-size:15px; font-variant-numeric:tabular-nums; }
+/* 2026-09-07 八改：普通行数字加粗 600（与页面一致）；合计行由 tr.subtotal 规则保持 700 */
+.c-num { font-family:'Consolas','Segoe UI',monospace; font-size:15px; font-variant-numeric:tabular-nums; font-weight:600; }
 /* 2026-09-06 按用户 Excel 样图：5 个指标列（销售额/毛利额/毛利率/来客数/客单价）整列纯黄，库存金额与增长率列白底 */
 /* 页签2 值列与增长率列共用 col-* 类，用 :not(.rate-up):not(.rate-down) 只命中值单元格；合计行整体白底 */
 tr:not(.subtotal) > td.c-num.col-sales:not(.rate-up):not(.rate-down),
