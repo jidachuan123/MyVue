@@ -18,6 +18,39 @@ function fmtDate(d) {
   const day = String(d.getDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
 }
+
+// ========== 报表标题（2026-09-07 九改：日期 + 机构名称 + 销售详情） ==========
+// '2026-09-06' → '2026年9月6号'（年月日不带前导零）
+function fmtCnDate(s) {
+  if (!s) return ''
+  const p = String(s).split('-')
+  if (p.length < 3) return String(s)
+  return `${p[0]}年${Number(p[1])}月${Number(p[2])}号`
+}
+// 标题日期段：单日显示一天；跨日同年同月压缩为「2026年9月5号~9月6号」
+function fmtTitleDateRange(start, end) {
+  const a = fmtCnDate(start)
+  const b = fmtCnDate(end)
+  if (!a) return b
+  if (!b || a === b) return a
+  const ps = String(start).split('-')
+  const pe = String(end).split('-')
+  if (ps.length === 3 && pe.length === 3 && ps[0] === pe[0]) {
+    if (ps[1] === pe[1]) {
+      return `${ps[0]}年${Number(ps[1])}月${Number(ps[2])}号~${Number(pe[2])}号`
+    }
+    return `${ps[0]}年${Number(ps[1])}月${Number(ps[2])}号~${Number(pe[1])}月${Number(pe[2])}号`
+  }
+  return `${a}~${b}`
+}
+// 查询结果里第一个非空机构名称（用于标题；查询多个机构时取第一个机构名）
+const titleOrgName = ref('')
+// 标题 = 本期查询区间日期 + 机构名称 + 销售详情；未查出机构名前先只显示日期部分
+const reportTitle = computed(() => {
+  const datePart = fmtTitleDateRange(queryForm.value.startDate, queryForm.value.endDate)
+  const parts = [datePart, titleOrgName.value.trim(), '销售详情'].filter(Boolean)
+  return parts.join(' ') || '部门销售详情'
+})
 function defaultQueryForm() {
   const now = new Date()
   const prev = new Date(now); prev.setDate(now.getDate() - 1)      // 前一天 → 本期
@@ -81,6 +114,9 @@ async function fetchData() {
     ])
     apiData.value = detail
     apiDataYoY.value = detailYoY
+    // 标题机构名称：取查询结果第一个非空「机构名称」
+    const orgRow = (detail || []).find(r => r && r['机构名称'])
+    titleOrgName.value = orgRow ? String(orgRow['机构名称']) : ''
     // 去掉部门为"行政部"的条（用户要求）；总计那两遍 deptLevels 不传返回机构汇总（部门名称1 为空，不受此过滤影响）
     deptSummary.value = lv2 ? lv2.filter(r => r['部门名称2'] !== '行政部') : null
     storeTotal.value = lv1 ? lv1.filter(r => r['部门名称1'] !== '行政部') : null
@@ -94,6 +130,7 @@ async function fetchData() {
     storeTotal.value = null
     deptSummaryYoY.value = null
     storeTotalYoY.value = null
+    titleOrgName.value = ''
   } finally {
     apiLoading.value = false
   }
@@ -108,6 +145,7 @@ function resetForm() {
   storeTotal.value = null
   deptSummaryYoY.value = null
   storeTotalYoY.value = null
+  titleOrgName.value = ''
   apiError.value = ''
 }
 
@@ -452,7 +490,7 @@ function exportExcel() {
   <div class="sales-detail-page">
     <!-- 标题区域 -->
     <div class="page-header">
-      <h2>部门销售详情1</h2>
+      <h2>{{ reportTitle }}</h2>
       <div class="date-info">
         <span class="tag current">查询日期：{{ queryForm.startDate }} ~ {{ queryForm.endDate }}</span>
         <span v-if="apiData" class="tag loaded">已加载 {{ loadedCount }} 条API数据</span>
