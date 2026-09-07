@@ -121,33 +121,6 @@ function resetForm() {
   apiError.value = ''
 }
 
-// ========== 发送日报（手动触发截图 + 邮件，使用当前页面查询条件） ==========
-const sendingReport = ref(false)
-async function sendReport() {
-  if (!confirm('确定要生成「各店每月销售详情2」截图并发送邮件吗？\n将使用当前页面的查询条件（机构编码/部门层级/部门编码/日期）。')) {
-    return
-  }
-  sendingReport.value = true
-  try {
-    const res = await request.post('/provider/sales/report/detail2/trigger', {
-      orgCode: queryForm.value.orgCode,
-      department: queryForm.value.department,
-      deptLevels: queryForm.value.deptLevels,
-      startDate: queryForm.value.startDate,
-      endDate: queryForm.value.endDate,
-      cmpStartDate: queryForm.value.cmpStartDate,
-      cmpEndDate: queryForm.value.cmpEndDate,
-      yoyStartDate: queryForm.value.yoyStartDate,
-      yoyEndDate: queryForm.value.yoyEndDate
-    })
-    alert(res.result || '执行完成')
-  } catch (err) {
-    alert('发送失败：' + (err.message || '未知错误'))
-  } finally {
-    sendingReport.value = false
-  }
-}
-
 onMounted(fetchData)
 
 // ========== 数值辅助 ==========
@@ -335,7 +308,13 @@ function formatInt(n) {
   if (n === undefined || n === null) return ''
   return Number(n).toLocaleString('zh-CN')
 }
-function formatRate(v) {
+// 增长率箭头（正绿▲ / 负红▼ / 0 与空为空），与数字分两段渲染保证整列对齐
+function rateArrow(v) {
+  if (v === undefined || v === null) return ''
+  return v > 0 ? '▲' : (v < 0 ? '▼' : '')
+}
+// 增长率数字文本（不含箭头，黑色）
+function rateText(v) {
   if (v === undefined || v === null) return ''
   const prefix = v > 0 ? '+' : ''
   return prefix + Number(v).toFixed(2) + '%'
@@ -349,40 +328,6 @@ function getRateClass(v) {
   if (v > 0) return 'rate-up'
   if (v < 0) return 'rate-down'
   return ''
-}
-
-// ========== 导出 Excel (CSV) ==========
-function exportExcel() {
-  const headers = [
-    '机构代码', '机构名称', '当日库存金额', '销售额/元', '同比销售额增长率', '环比销售额增长率',
-    '毛利额/元', '同比毛利额增长率', '环比毛利额增长率', '毛利率',
-    '来客数', '同比来客数增长率', '环比来客数增长率',
-    '客单价/元', '同比客单价增长率', '环比客单价增长率'
-  ]
-  let csv = '\uFEFF' + headers.join(',') + '\n'
-  for (const row of tableData.value) {
-    const values = [
-      row.orgCode, row.orgName, row.stockAmount, row.sales,
-      formatRate(row.yoySalesRate), formatRate(row.momSalesRate),
-      row.profit, formatRate(row.yoyProfitRate), formatRate(row.momProfitRate),
-      formatPct(row.profitRate),
-      row.customers, formatRate(row.yoyCustomerRate), formatRate(row.momCustomerRate),
-      row.avgPrice, formatRate(row.yoyAvgPriceRate), formatRate(row.momAvgPriceRate)
-    ]
-    csv += values.map(v => {
-      const s = String(v || '')
-      if (s.includes(',') || s.includes('\n') || s.includes('"')) {
-        return '"' + s.replace(/"/g, '""') + '"'
-      }
-      return s
-    }).join(',') + '\n'
-  }
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-  const link = document.createElement('a')
-  link.href = URL.createObjectURL(blob)
-  link.download = '各店每月销售详情_' + queryForm.value.endDate + '.csv'
-  link.click()
-  URL.revokeObjectURL(link.href)
 }
 </script>
 
@@ -449,17 +394,6 @@ function exportExcel() {
             {{ apiLoading ? '查询中...' : '查询' }}
           </button>
           <button class="btn-default" @click="resetForm">重置</button>
-          <button class="btn-report" @click="sendReport" :disabled="sendingReport">
-            {{ sendingReport ? '发送中...' : '发送日报' }}
-          </button>
-          <button class="btn-export" @click="exportExcel">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="7 10 12 15 17 10"/>
-              <line x1="12" y1="15" x2="12" y2="3"/>
-            </svg>
-            导出Excel
-          </button>
         </div>
       </div>
       <div class="query-error" v-if="apiError">{{ apiError }}</div>
@@ -496,18 +430,18 @@ function exportExcel() {
               <td class="col-org subtotal-label">{{ row.orgName }}</td>
               <td class="col-num col-stock">{{ formatAmount(row.stockAmount) }}</td>
               <td class="col-num col-sales">{{ formatAmount(row.sales) }}</td>
-              <td :class="['col-rate', 'col-sales', getRateClass(row.yoySalesRate)]">{{ formatRate(row.yoySalesRate) }}</td>
-              <td :class="['col-rate', 'col-sales', getRateClass(row.momSalesRate)]">{{ formatRate(row.momSalesRate) }}</td>
+              <td :class="['col-rate', 'col-sales', getRateClass(row.yoySalesRate)]"><span class="rate-arrow">{{ rateArrow(row.yoySalesRate) }}</span><span class="rate-num">{{ rateText(row.yoySalesRate) }}</span></td>
+              <td :class="['col-rate', 'col-sales', getRateClass(row.momSalesRate)]"><span class="rate-arrow">{{ rateArrow(row.momSalesRate) }}</span><span class="rate-num">{{ rateText(row.momSalesRate) }}</span></td>
               <td class="col-num col-profit">{{ formatAmount(row.profit) }}</td>
-              <td :class="['col-rate', 'col-profit', getRateClass(row.yoyProfitRate)]">{{ formatRate(row.yoyProfitRate) }}</td>
-              <td :class="['col-rate', 'col-profit', getRateClass(row.momProfitRate)]">{{ formatRate(row.momProfitRate) }}</td>
+              <td :class="['col-rate', 'col-profit', getRateClass(row.yoyProfitRate)]"><span class="rate-arrow">{{ rateArrow(row.yoyProfitRate) }}</span><span class="rate-num">{{ rateText(row.yoyProfitRate) }}</span></td>
+              <td :class="['col-rate', 'col-profit', getRateClass(row.momProfitRate)]"><span class="rate-arrow">{{ rateArrow(row.momProfitRate) }}</span><span class="rate-num">{{ rateText(row.momProfitRate) }}</span></td>
               <td class="col-num col-profit">{{ formatPct(row.profitRate) }}</td>
               <td class="col-num col-customer">{{ formatInt(row.customers) }}</td>
-              <td :class="['col-rate', 'col-customer', getRateClass(row.yoyCustomerRate)]">{{ formatRate(row.yoyCustomerRate) }}</td>
-              <td :class="['col-rate', 'col-customer', getRateClass(row.momCustomerRate)]">{{ formatRate(row.momCustomerRate) }}</td>
+              <td :class="['col-rate', 'col-customer', getRateClass(row.yoyCustomerRate)]"><span class="rate-arrow">{{ rateArrow(row.yoyCustomerRate) }}</span><span class="rate-num">{{ rateText(row.yoyCustomerRate) }}</span></td>
+              <td :class="['col-rate', 'col-customer', getRateClass(row.momCustomerRate)]"><span class="rate-arrow">{{ rateArrow(row.momCustomerRate) }}</span><span class="rate-num">{{ rateText(row.momCustomerRate) }}</span></td>
               <td class="col-num col-price">{{ formatAmount(row.avgPrice) }}</td>
-              <td :class="['col-rate', 'col-price', getRateClass(row.yoyAvgPriceRate)]">{{ formatRate(row.yoyAvgPriceRate) }}</td>
-              <td :class="['col-rate', 'col-price', getRateClass(row.momAvgPriceRate)]">{{ formatRate(row.momAvgPriceRate) }}</td>
+              <td :class="['col-rate', 'col-price', getRateClass(row.yoyAvgPriceRate)]"><span class="rate-arrow">{{ rateArrow(row.yoyAvgPriceRate) }}</span><span class="rate-num">{{ rateText(row.yoyAvgPriceRate) }}</span></td>
+              <td :class="['col-rate', 'col-price', getRateClass(row.momAvgPriceRate)]"><span class="rate-arrow">{{ rateArrow(row.momAvgPriceRate) }}</span><span class="rate-num">{{ rateText(row.momAvgPriceRate) }}</span></td>
             </tr>
             <!-- 各店行：库存=0 的门店隐藏（v-show，仍参与合计计算） -->
             <tr v-else v-show="row.stockAmount > 0" :class="{ 'odd': idx % 2 === 1 }">
@@ -515,18 +449,18 @@ function exportExcel() {
               <td class="col-org">{{ row.orgName }}</td>
               <td class="col-num col-stock">{{ formatAmount(row.stockAmount) }}</td>
               <td class="col-num col-sales">{{ formatAmount(row.sales) }}</td>
-              <td :class="['col-rate', 'col-sales', getRateClass(row.yoySalesRate)]">{{ formatRate(row.yoySalesRate) }}</td>
-              <td :class="['col-rate', 'col-sales', getRateClass(row.momSalesRate)]">{{ formatRate(row.momSalesRate) }}</td>
+              <td :class="['col-rate', 'col-sales', getRateClass(row.yoySalesRate)]"><span class="rate-arrow">{{ rateArrow(row.yoySalesRate) }}</span><span class="rate-num">{{ rateText(row.yoySalesRate) }}</span></td>
+              <td :class="['col-rate', 'col-sales', getRateClass(row.momSalesRate)]"><span class="rate-arrow">{{ rateArrow(row.momSalesRate) }}</span><span class="rate-num">{{ rateText(row.momSalesRate) }}</span></td>
               <td class="col-num col-profit">{{ formatAmount(row.profit) }}</td>
-              <td :class="['col-rate', 'col-profit', getRateClass(row.yoyProfitRate)]">{{ formatRate(row.yoyProfitRate) }}</td>
-              <td :class="['col-rate', 'col-profit', getRateClass(row.momProfitRate)]">{{ formatRate(row.momProfitRate) }}</td>
+              <td :class="['col-rate', 'col-profit', getRateClass(row.yoyProfitRate)]"><span class="rate-arrow">{{ rateArrow(row.yoyProfitRate) }}</span><span class="rate-num">{{ rateText(row.yoyProfitRate) }}</span></td>
+              <td :class="['col-rate', 'col-profit', getRateClass(row.momProfitRate)]"><span class="rate-arrow">{{ rateArrow(row.momProfitRate) }}</span><span class="rate-num">{{ rateText(row.momProfitRate) }}</span></td>
               <td class="col-num col-profit">{{ formatPct(row.profitRate) }}</td>
               <td class="col-num col-customer">{{ formatInt(row.customers) }}</td>
-              <td :class="['col-rate', 'col-customer', getRateClass(row.yoyCustomerRate)]">{{ formatRate(row.yoyCustomerRate) }}</td>
-              <td :class="['col-rate', 'col-customer', getRateClass(row.momCustomerRate)]">{{ formatRate(row.momCustomerRate) }}</td>
+              <td :class="['col-rate', 'col-customer', getRateClass(row.yoyCustomerRate)]"><span class="rate-arrow">{{ rateArrow(row.yoyCustomerRate) }}</span><span class="rate-num">{{ rateText(row.yoyCustomerRate) }}</span></td>
+              <td :class="['col-rate', 'col-customer', getRateClass(row.momCustomerRate)]"><span class="rate-arrow">{{ rateArrow(row.momCustomerRate) }}</span><span class="rate-num">{{ rateText(row.momCustomerRate) }}</span></td>
               <td class="col-num col-price">{{ formatAmount(row.avgPrice) }}</td>
-              <td :class="['col-rate', 'col-price', getRateClass(row.yoyAvgPriceRate)]">{{ formatRate(row.yoyAvgPriceRate) }}</td>
-              <td :class="['col-rate', 'col-price', getRateClass(row.momAvgPriceRate)]">{{ formatRate(row.momAvgPriceRate) }}</td>
+              <td :class="['col-rate', 'col-price', getRateClass(row.yoyAvgPriceRate)]"><span class="rate-arrow">{{ rateArrow(row.yoyAvgPriceRate) }}</span><span class="rate-num">{{ rateText(row.yoyAvgPriceRate) }}</span></td>
+              <td :class="['col-rate', 'col-price', getRateClass(row.momAvgPriceRate)]"><span class="rate-arrow">{{ rateArrow(row.momAvgPriceRate) }}</span><span class="rate-num">{{ rateText(row.momAvgPriceRate) }}</span></td>
             </tr>
           </template>
         </tbody>
@@ -652,32 +586,6 @@ function exportExcel() {
   transition: all .2s;
 }
 .btn-default:hover { border-color: #1890ff; color: #1890ff; }
-.btn-export {
-  background: #52c41a;
-  color: #fff;
-  border: none;
-  padding: 6px 14px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 13px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  transition: background .2s;
-}
-.btn-export:hover { background: #73d13d; }
-.btn-report {
-  background: #fa8c16;
-  color: #fff;
-  border: none;
-  padding: 6px 14px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 13px;
-  transition: background .2s;
-}
-.btn-report:hover { background: #ffa940; }
-.btn-report:disabled { background: #ffc069; cursor: not-allowed; }
 
 /* 表格 */
 .table-wrapper {
@@ -702,10 +610,14 @@ function exportExcel() {
   top: 0;
   z-index: 10;
 }
+/* 2026-09-07 七改：放大阿拉伯数字一档（.col-num 17px / .col-rate 16px）让普通行数字清晰度对齐加粗合计行；
+   同时把 tbody td 上下 padding 7px→4px 并禁止换行，字号增大带来的高度增量被留白压缩抵消，
+   行高基本不变，格子不会被撑大 */
 .sales-table tbody td {
-  padding: 7px 6px;
+  padding: 4px 6px;
   border: 1px solid #000;
   text-align: center;
+  white-space: nowrap;
 }
 .sales-table tbody tr:hover {
   background: #f5f5f5;
@@ -717,41 +629,45 @@ function exportExcel() {
   background: #f5f5f5;
 }
 
-/* 列宽 */
-.col-code { min-width: 90px; }
+/* 列宽（2026-09-07 七改：数字列 17px、增长率列 16px，等比放大；代码列 15px）
+   2026-09-07 八改：普通行阿拉伯数字加粗 600（合计行仍是 700，保持最突出） */
+.col-code { min-width: 90px; font-size: 15px; font-weight: 600; }
 .col-org { min-width: 200px; }
-.col-num { min-width: 85px; text-align: center !important; font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif; }
-.col-rate { min-width: 70px; }
+.col-num { min-width: 85px; text-align: center !important; font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif; font-size: 17px; font-variant-numeric: tabular-nums; font-weight: 600; }
+.col-rate { min-width: 70px; font-size: 16px; font-variant-numeric: tabular-nums; font-weight: 600; }
 
-/* 列分组颜色（2026-09-06 按用户 Excel 样图：销售额/毛利额/毛利率/来客数/客单价 5 个指标列整列纯黄，库存金额与增长率列白底） */
-.col-num.col-sales, .col-num.col-profit, .col-num.col-customer, .col-num.col-price { background: #FFFF00 !important; }
-.sales-table tr.subtotal td { background: #fff !important; }
+/* 列分组颜色（2026-09-07 移植 SD1：5 个指标列整列纯黄，库存金额与增长率列白底；合计行不黄） */
+.sales-table tbody tr:not(.subtotal) .col-num.col-sales,
+.sales-table tbody tr:not(.subtotal) .col-num.col-profit,
+.sales-table tbody tr:not(.subtotal) .col-num.col-customer,
+.sales-table tbody tr:not(.subtotal) .col-num.col-price { background: #FFFF00 !important; }
 
-/* 合计行（2026-09-06 改白底黑框） */
+/* 合计行（移植 SD1：淡青色背景 + 700 加粗） */
 .subtotal {
-  background: #fff !important;
+  background: #B8E0DC !important;
   font-weight: 700;
 }
 .subtotal td {
   border-top: 2px solid #000 !important;
   border-bottom: 2px solid #000 !important;
-  color: #333 !important;
+  color: #1a1a1a !important;
+  background: #B8E0DC !important;
 }
-.subtotal:hover {
-  background: #f5f5f5 !important;
-}
+.sales-table tr.subtotal td { background: #B8E0DC !important; }
+.subtotal:hover { background: #A5D5CF !important; }
+.subtotal:hover td { background: #A5D5CF !important; }
 .subtotal-label {
   font-weight: 700;
   letter-spacing: 1px;
 }
 
-/* 增长率颜色（中国惯例：涨红跌绿） */
-.rate-up {
-  color: #d32f2f;
-  font-weight: 500;
-}
-.rate-down {
-  color: #388e3c;
-  font-weight: 500;
-}
+/* 合计行 数字加粗（2026-09-07 六改移植：覆盖 .col-num 默认字重） */
+.sales-table tr.subtotal td.col-num,
+.sales-table tr.subtotal td .rate-num { font-weight: 700 !important; }
+
+/* 增长率箭头 + 数字（移植 SD1 最终态：箭头绿涨红跌，数字黑色，两段对齐） */
+.rate-arrow { display: inline-block; width: 1em; text-align: center; }
+.rate-num { display: inline-block; min-width: 4.1em; text-align: right; color: #1a1a1a; }
+.sales-table td.rate-up .rate-arrow { color: #2e7d32 !important; font-weight: 600; }
+.sales-table td.rate-down .rate-arrow { color: #c62828 !important; font-weight: 600; }
 </style>
