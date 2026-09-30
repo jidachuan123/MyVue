@@ -112,16 +112,21 @@ async function fetchData() {
       request.get('/provider/sales/detail', { ...cmpBase, ...yoY, deptLevels: '2' }),
       request.get('/provider/sales/detail', { ...cmpBase, ...yoY, deptLevels: '' })
     ])
-    apiData.value = detail
-    apiDataYoY.value = detailYoY
+    apiData.value = aggregateRowsByKey(detail, ['部门编码3', '部门编码2'])
+    apiDataYoY.value = aggregateRowsByKey(detailYoY, ['部门编码3', '部门编码2'])
     // 标题机构名称：取查询结果第一个非空「机构名称」
-    const orgRow = (detail || []).find(r => r && r['机构名称'])
+    const orgRow = (apiData.value || []).find(r => r && r['机构名称'])
     titleOrgName.value = orgRow ? String(orgRow['机构名称']) : ''
     // 去掉部门为"行政部"的条（用户要求）；总计那两遍 deptLevels 不传返回机构汇总（部门名称1 为空，不受此过滤影响）
-    deptSummary.value = lv2 ? lv2.filter(r => r['部门名称2'] !== '行政部') : null
-    storeTotal.value = lv1 ? lv1.filter(r => r['部门名称1'] !== '行政部') : null
-    deptSummaryYoY.value = lv2YoY ? lv2YoY.filter(r => r['部门名称2'] !== '行政部') : null
-    storeTotalYoY.value = lv1YoY ? lv1YoY.filter(r => r['部门名称1'] !== '行政部') : null
+    // ⚠️ 先跨天聚合（按部门去重合并）再过滤，避免跨天查询时合计行只取到第一天
+    const lv2Agg = aggregateRowsByKey(lv2, ['部门名称2', '部门编码2'])
+    const lv1Agg = aggregateRowsByKey(lv1, ['部门名称1', '机构编码'])
+    const lv2YoYAgg = aggregateRowsByKey(lv2YoY, ['部门名称2', '部门编码2'])
+    const lv1YoYAgg = aggregateRowsByKey(lv1YoY, ['部门名称1', '机构编码'])
+    deptSummary.value = lv2Agg ? lv2Agg.filter(r => r['部门名称2'] !== '行政部') : null
+    storeTotal.value = lv1Agg ? lv1Agg.filter(r => r['部门名称1'] !== '行政部') : null
+    deptSummaryYoY.value = lv2YoYAgg ? lv2YoYAgg.filter(r => r['部门名称2'] !== '行政部') : null
+    storeTotalYoY.value = lv1YoYAgg ? lv1YoYAgg.filter(r => r['部门名称1'] !== '行政部') : null
   } catch (e) {
     apiError.value = '数据加载失败: ' + (e.message || '未知错误')
     apiData.value = null
@@ -189,6 +194,48 @@ function momRate(cur, prior) {
   const p = num(prior)
   if (c === null || p === null) return null
   return calcRate(c, p)
+}
+
+// ========== 跨天聚合（2026-09-30 新增，与后端截图/对照页同源）==========
+// 引擎在日期区间查询时按「天 × 部门」逐日返回行：同一天查询每部门一行（行为不变）；
+// 跨天时同一部门出现多行（每天一行），必须按部门聚合：可加总字段求和、率类字段重算。
+const SUM_FIELDS = ['销售金额', '含税毛利', '交易笔数', '对期销售金额', '对期含税毛利', '对期交易笔数']
+// 聚合后重算率类字段：增长率 = (Σ本期−Σ对期)/|Σ对期|，毛利率/客单价由合计值重算
+function recalcRowRates(t) {
+  const s = Number(t['销售金额']) || 0, p = Number(t['含税毛利']) || 0, c = Number(t['交易笔数']) || 0
+  const ps = Number(t['对期销售金额']) || 0, pp = Number(t['对期含税毛利']) || 0, pc = Number(t['对期交易笔数']) || 0
+  t['销售额增长率'] = calcRate(s, ps)
+  t['毛利额增长率'] = calcRate(p, pp)
+  if (s > 0) t['毛利率'] = Number(((p / s) * 100).toFixed(2))
+  if (c > 0) t['客单价'] = s / c
+  if (pc > 0) t['对期客单价'] = ps / pc
+}
+// 按 keyFields（依次兜底取第一个非空字段）聚合；每键仅一行时原样返回（单日查询与旧版完全一致）
+function aggregateRowsByKey(rows, keyFields) {
+  if (!rows || rows.length <= 1) return rows
+  const map = new Map()
+  const cnt = new Map()
+  for (const r of rows) {
+    let k = null
+    for (const f of keyFields) {
+      const v = r[f]
+      if (v !== null && v !== undefined && String(v).trim() !== '') { k = String(v).trim(); break }
+    }
+    if (k === null) return rows // 键缺失 → 放弃聚合（保险）
+    const t = map.get(k)
+    if (!t) { map.set(k, { ...r }); cnt.set(k, 1) }
+    else {
+      for (const f of SUM_FIELDS) t[f] = (Number(t[f]) || 0) + (Number(r[f]) || 0)
+      cnt.set(k, cnt.get(k) + 1)
+    }
+  }
+  if (map.size === rows.length) return rows // 没有重复键（单日查询）→ 原样返回
+  const out = []
+  for (const [k, t] of map) {
+    if (cnt.get(k) > 1) recalcRowRates(t)
+    out.push(t)
+  }
+  return out
 }
 
 // ========== 合并数据源：API 返回后覆盖 机构/部门 与 数值列 ==========

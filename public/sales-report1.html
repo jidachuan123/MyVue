@@ -274,6 +274,39 @@ function pct2(v) { const n = num(v); return n === null ? null : Math.round(n * 1
 function calcRate(cur, prior) { if (!prior || prior === 0) return 0; return Number((((cur - prior) / Math.abs(prior)) * 100).toFixed(2)); }
 function momRate(cur, prior) { const c = num(cur), p = num(prior); if (c === null || p === null) return null; return calcRate(c, p); }
 function priorValue(current, rate) { if (rate == null) return current; return current / (1 + rate / 100); }
+
+/* ================== 跨天聚合（2026-09-30 新增，与 SalesDetail.vue / 后端截图同源） ==================
+   引擎在日期区间查询时按「天 × 部门」逐日返回行：同一天查询每部门一行（行为不变）；
+   跨天时同一部门出现多行（每天一行），必须按部门聚合：可加总字段求和、率类字段重算。 */
+const SUM_FIELDS = ['销售金额', '含税毛利', '交易笔数', '对期销售金额', '对期含税毛利', '对期交易笔数'];
+function recalcRowRates(t) {
+  const s = Number(t['销售金额']) || 0, p = Number(t['含税毛利']) || 0, c = Number(t['交易笔数']) || 0;
+  const ps = Number(t['对期销售金额']) || 0, pp = Number(t['对期含税毛利']) || 0, pc = Number(t['对期交易笔数']) || 0;
+  t['销售额增长率'] = calcRate(s, ps);
+  t['毛利额增长率'] = calcRate(p, pp);
+  if (s > 0) t['毛利率'] = Number(((p / s) * 100).toFixed(2));
+  if (c > 0) t['客单价'] = s / c;
+  if (pc > 0) t['对期客单价'] = ps / pc;
+}
+function aggregateRowsByKey(rows, keyFields) {
+  if (!rows || rows.length <= 1) return rows;
+  const map = new Map(), cnt = new Map();
+  for (const r of rows) {
+    let k = null;
+    for (const f of keyFields) {
+      const v = r[f];
+      if (v !== null && v !== undefined && String(v).trim() !== '') { k = String(v).trim(); break; }
+    }
+    if (k === null) return rows; // 键缺失 → 放弃聚合（保险）
+    const t = map.get(k);
+    if (!t) { map.set(k, Object.assign({}, r)); cnt.set(k, 1); }
+    else { for (const f of SUM_FIELDS) t[f] = (Number(t[f]) || 0) + (Number(r[f]) || 0); cnt.set(k, cnt.get(k) + 1); }
+  }
+  if (map.size === rows.length) return rows; // 没有重复键（单日查询）→ 原样返回
+  const out = [];
+  for (const [k, t] of map) { if (cnt.get(k) > 1) recalcRowRates(t); out.push(t); }
+  return out;
+}
 function sum(rows, field) { return rows.reduce(function (s, r) { return s + (Number(r[field]) || 0); }, 0); }
 function hasAny(rows, field) { return rows.some(function (r) { return r[field] !== null && r[field] !== undefined; }); }
 function getDeptGroup(code) {
@@ -555,14 +588,19 @@ async function query() {
       throw new Error('有调用失败：' + bad);
     }
 
-    const detail = calls[0].data, detailYoY = calls[1].data;
+    const detail = aggregateRowsByKey(calls[0].data, ['部门编码3', '部门编码2']);
+    const detailYoY = aggregateRowsByKey(calls[1].data, ['部门编码3', '部门编码2']);
     const lv2 = calls[2].data, lv1 = calls[3].data, lv2YoY = calls[4].data, lv1YoY = calls[5].data;
 
-    /* ---- ① 过滤行政部 ---- */
-    const deptSummary = lv2 ? lv2.filter(function (r) { return r['部门名称2'] !== '行政部'; }) : null;
-    const storeTotal = lv1 ? lv1.filter(function (r) { return r['部门名称1'] !== '行政部'; }) : null;
-    const deptSummaryYoY = lv2YoY ? lv2YoY.filter(function (r) { return r['部门名称2'] !== '行政部'; }) : null;
-    const storeTotalYoY = lv1YoY ? lv1YoY.filter(function (r) { return r['部门名称1'] !== '行政部'; }) : null;
+    /* ---- ① 跨天聚合 + 过滤行政部（⚠️ 先聚合去重再过滤，跨天时合计行才不漏天） ---- */
+    const lv2Agg = aggregateRowsByKey(lv2, ['部门名称2', '部门编码2']);
+    const lv1Agg = aggregateRowsByKey(lv1, ['部门名称1', '机构编码']);
+    const lv2YoYAgg = aggregateRowsByKey(lv2YoY, ['部门名称2', '部门编码2']);
+    const lv1YoYAgg = aggregateRowsByKey(lv1YoY, ['部门名称1', '机构编码']);
+    const deptSummary = lv2Agg ? lv2Agg.filter(function (r) { return r['部门名称2'] !== '行政部'; }) : null;
+    const storeTotal = lv1Agg ? lv1Agg.filter(function (r) { return r['部门名称1'] !== '行政部'; }) : null;
+    const deptSummaryYoY = lv2YoYAgg ? lv2YoYAgg.filter(function (r) { return r['部门名称2'] !== '行政部'; }) : null;
+    const storeTotalYoY = lv1YoYAgg ? lv1YoYAgg.filter(function (r) { return r['部门名称1'] !== '行政部'; }) : null;
 
     /* ---- ② 明细行构建 + 同比映射（sourceData） ---- */
     const yoyByCode = new Map();
