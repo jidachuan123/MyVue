@@ -4,6 +4,9 @@ import vue from '@vitejs/plugin-vue'
 export default defineConfig({
   plugins: [vue()],
   server: {
+    // 允许局域网内其他机器用本机真实 IP 访问（默认只监听 localhost）
+    // 0.0.0.0 = 监听所有网卡；启动时会保持端口 3001
+    host: '0.0.0.0',
     port: 3001,
     proxy: {
       // Consumer 请求 → 8002（登录、用户等）
