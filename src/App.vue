@@ -28,6 +28,7 @@ const logout = () => {
         <router-link to="/sales-detail" active-class="active">销售详情1</router-link>
         <router-link to="/sales-detail2" active-class="active">销售详情2</router-link>
         <router-link to="/sales-detail3" active-class="active">销售详情3</router-link>
+        <router-link to="/sales-detail4" active-class="active">销售详情4</router-link>
         <router-link to="/external" active-class="active">外部对接</router-link>
         <a class="logout-btn" @click="logout">退出</a>
       </nav>

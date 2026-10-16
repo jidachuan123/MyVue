@@ -6,6 +6,7 @@ import ExternalDemo from '../views/ExternalDemo.vue'
 import SalesDetail from '../views/SalesDetail.vue'
 import SalesDetail2 from '../views/SalesDetail2.vue'
 import SalesDetail3 from '../views/SalesDetail3.vue'
+import SalesDetail4 from '../views/SalesDetail4.vue'
 
 const routes = [
   { path: '/', redirect: '/login' },
@@ -16,6 +17,7 @@ const routes = [
   { path: '/sales-detail', name: 'SalesDetail', component: SalesDetail, meta: { requiresAuth: true } },
   { path: '/sales-detail2', name: 'SalesDetail2', component: SalesDetail2, meta: { requiresAuth: true } },
   { path: '/sales-detail3', name: 'SalesDetail3', component: SalesDetail3, meta: { requiresAuth: true } },
+  { path: '/sales-detail4', name: 'SalesDetail4', component: SalesDetail4, meta: { requiresAuth: true } },
 ]
 
 const router = createRouter({
