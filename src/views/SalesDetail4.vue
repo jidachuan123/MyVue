@@ -380,24 +380,30 @@ onMounted(async () => {
   padding: 0 0 12px;
 }
 .sales-table {
+  /* 2026-10-27：表格不再铺满容器（原 100% → 视口 2000 时约 1760px），
+     改为上限 1280px 居中。9 列平分后每列约 142px（原 195px），
+     单元格收窄后字可以放大到 16px 仍放得下；内容未做任何裁剪（white-space:nowrap 兜底）。
+     小屏（<1280px）仍按 100% 铺满，不影响原有响应式表现。 */
   width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
   border-collapse: collapse;
   white-space: nowrap;
 }
 .sales-table th {
-  padding: 9px 8px;
+  padding: 10px 8px;
   border: 1px solid #000;
   text-align: center;
   background: #fafafa;
   color: #333;
   font-weight: 700;
-  font-size: 13px;
+  font-size: 15px;
 }
 .sales-table td {
-  padding: 7px 8px;
+  padding: 9px 8px;
   border: 1px solid #000;
   text-align: center;
-  font-size: 14px;
+  font-size: 16px;
   font-variant-numeric: tabular-nums;
 }
 .col-name { text-align: center !important; vertical-align: middle; }
