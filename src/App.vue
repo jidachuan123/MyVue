@@ -4,7 +4,8 @@ import { useRoute, useRouter } from 'vue-router'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import {
   Odometer, TrendCharts, Box, DataAnalysis, Goods,
-  Setting, Connection, Fold, Expand, SwitchButton, UserFilled
+  Setting, Connection, Fold, Expand, SwitchButton, UserFilled,
+  Monitor, DataBoard, Shop
 } from '@element-plus/icons-vue'
 import request from './utils/request'
 
@@ -14,11 +15,25 @@ const router = useRouter()
 // 登录页不套后台框架（保持原来的居中卡片 + 渐变背景）
 const isLoginPage = computed(() => route.path === '/login')
 
+// 驾驶舱是整屏大屏，内容区不要 18px 内边距，否则四周会露出浅灰边
+const isCockpitPage = computed(() => route.path.startsWith('/dashboard'))
+
 // ============================================================
 // 2026-11-09：主界面由「顶部横向导航」改为「左侧树导航」
-//   一级三分组：报表 / 数据 / 系统；报表下再分销售报表、库存报表
+//   一级分组：驾驶舱数据 / 报表 / 数据 / 系统
+//   驾驶舱放最上面（大屏是高频入口），下分集团 / 超市 / 百购三个驾驶舱
 // ============================================================
 const menuGroups = [
+  {
+    key: 'cockpit',
+    title: '驾驶舱数据',
+    icon: Monitor,
+    children: [
+      { key: '/dashboard', title: '集团驾驶舱', icon: DataBoard },
+      { key: '/dashboard-supermarket', title: '超市驾驶舱', icon: Shop },
+      { key: '/dashboard-mall', title: '百购驾驶舱', icon: Shop },
+    ],
+  },
   {
     key: 'report',
     title: '报表',
@@ -60,7 +75,7 @@ const menuGroups = [
 // 当前选中项 = 当前路由
 const activeMenu = computed(() => route.path)
 // 默认展开全部分组
-const defaultOpeneds = ['report', 'report-sales', 'report-stock', 'data', 'system']
+const defaultOpeneds = ['cockpit', 'report', 'report-sales', 'report-stock', 'data', 'system']
 
 // 面包屑：按当前路由在菜单树中的路径还原
 const breadcrumb = computed(() => {
@@ -181,7 +196,7 @@ const logout = () => {
         </div>
       </header>
 
-      <main class="app-content">
+      <main class="app-content" :class="{ 'app-content--flush': isCockpitPage }">
         <router-view />
       </main>
     </div>
@@ -377,5 +392,10 @@ body {
   min-width: 0;
   padding: 18px;
   overflow: auto;
+}
+
+/* 驾驶舱整屏铺满：去掉内边距，高度扣掉顶栏 */
+.app-content--flush {
+  padding: 0;
 }
 </style>

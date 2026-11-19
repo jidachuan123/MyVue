@@ -1,146 +1,104 @@
 <template>
   <div class="screen-wrap">
-    <!-- 固定 1920×1080 画布，按窗口等比缩放 -->
-    <div class="cockpit" :style="{ transform: `scale(${scale})` }">
-      <!-- ======================= 顶部 ======================= -->
+    <!--
+      固定 1920 宽画布，按「宽度」等比缩放铺满整个视口；
+      高度由 canvasH 反算（视口高 / 缩放比），多出来的高度由中间那一行 1fr 吸收，
+      因此不会像 contain 缩放那样在左右留黑边。
+    -->
+    <div class="cockpit" :style="{ height: `${canvasH}px`, transform: `scale(${scale})` }">
+      <!-- ======================= 顶部标题 ======================= -->
       <header class="hd">
         <div class="hd-left">
-          <span class="hd-date num">{{ dateText }}</span>
-          <span class="hd-week">{{ weekText }}</span>
-        </div>
-
-        <div class="hd-center">
-          <h1 class="hd-title">佳和集团经营数据驾驶舱</h1>
-          <div class="hd-subtitle">JIAHE GROUP · OPERATION COCKPIT</div>
+          <div class="hd-brand">
+            <span class="hd-logo">佳</span>
+            <div class="hd-brand-text">
+              <div class="hd-title">{{ scopeMeta.title }}</div>
+              <div class="hd-subtitle">{{ scopeMeta.subtitle }}</div>
+            </div>
+          </div>
         </div>
 
         <div class="hd-right">
-          <span v-if="ov.demo" class="hd-badge">示例数据</span>
-          <span class="hd-update">更新 <b>{{ clock }}</b></span>
-          <button class="hd-btn" @click="toggleFullscreen">
-            {{ isFullscreen ? '退出全屏' : '全屏' }}
-          </button>
+          <span class="hd-live"><i class="dot"></i>数据实时同步</span>
+          <span class="hd-meta">数据日期：<b class="num">{{ dataDate }}</b></span>
+          <span class="hd-meta">更新时间：<b class="num">{{ clock }}</b></span>
         </div>
       </header>
 
       <!-- ======================= 主体 ======================= -->
       <main class="main">
-        <!-- ① 销售趋势（近 7 天） -->
-        <PanelBox class="a-trend" title="销售趋势" sub="近 7 天 · 万元">
+        <!-- ① 顶部 4 张 KPI -->
+        <div class="row-kpi">
+          <KpiCard v-for="k in ov.kpis" :key="k.key" :kpi="k" />
+        </div>
+
+        <!-- ② 中部：8 张业态卡 + 右侧排名 -->
+        <div class="row-biz">
+          <div class="biz-grid">
+            <BizCard v-for="c in ov.bizCards" :key="c.key" :card="c" />
+          </div>
+
+          <PanelBox class="biz-rank" title="各业态销售" sub="昨日 · 万元" tight>
+            <template #extra>
+              <span class="rank-total">
+                合计 <b class="num">{{ fmtAmount(rankTotal, 1) }}</b>
+              </span>
+            </template>
+            <RankList :items="ov.ranking" />
+          </PanelBox>
+        </div>
+
+        <!-- ③ 底部：近 7 日销售趋势 -->
+        <PanelBox class="row-trend" title="销售趋势（近 7 日）" sub="集团合计 · 单位：万元">
           <template #extra>
-            7 天合计 <b class="num" style="color: #9fd8ff">{{ fmtAmount(trendTotal) }}</b>
+            <span class="trend-extra">
+              7 日合计 <b class="num">{{ fmtAmount(trendTotal, 1) }}</b>
+            </span>
           </template>
           <TrendChart :data="ov.trend7d" />
         </PanelBox>
-
-        <!-- ② 集团销售：昨日 / 本月累计 / 本年累计 -->
-        <PanelBox class="a-group" title="集团销售" sub="单位：万元">
-          <div class="group-wrap">
-            <div class="group-top">
-              <div class="kpi-label">昨日集团销售（万元）</div>
-              <div class="kpi-value">{{ fmtAmount(ov.groupYesterday.amount) }}</div>
-              <div class="kpi-chips">
-                <span class="chip">
-                  日环比
-                  <b :class="rateClass(ov.groupYesterday.dod)">{{ fmtPct(ov.groupYesterday.dod) }}</b>
-                </span>
-                <span class="chip">
-                  年同比
-                  <b :class="rateClass(ov.groupYesterday.yoy)">{{ fmtPct(ov.groupYesterday.yoy) }}</b>
-                </span>
-              </div>
-            </div>
-
-            <div class="group-bottom">
-              <div class="mini-kpi">
-                <div class="mini-kpi-label">本月累计（万元）</div>
-                <div class="mini-kpi-value">{{ fmtAmount(ov.monthToDate.amount, 0) }}</div>
-                <div class="mini-kpi-chips">
-                  <span class="chip">
-                    月环比 <b :class="rateClass(ov.monthToDate.mom)">{{ fmtPct(ov.monthToDate.mom) }}</b>
-                  </span>
-                  <span class="chip">
-                    月同比 <b :class="rateClass(ov.monthToDate.yoy)">{{ fmtPct(ov.monthToDate.yoy) }}</b>
-                  </span>
-                </div>
-              </div>
-
-              <div class="mini-kpi">
-                <div class="mini-kpi-label">本年累计（万元）</div>
-                <div class="mini-kpi-value">{{ fmtAmount(ov.yearToDate.amount, 0) }}</div>
-                <div class="mini-kpi-chips">
-                  <span class="chip">
-                    年同比 <b :class="rateClass(ov.yearToDate.yoy)">{{ fmtPct(ov.yearToDate.yoy) }}</b>
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </PanelBox>
-
-        <!-- ③ 今日实时销售 + 各业态柱状图 -->
-        <PanelBox class="a-realtime" title="今日实时销售" sub="T+0 口径">
-          <template #extra>
-            <span class="live"><i class="dot"></i>实时</span>
-          </template>
-
-          <div class="realtime-top">
-            <div>
-              <div class="kpi-label">截至 {{ ov.todayRealtime.asOfTime }} 累计</div>
-              <div class="rt-value">
-                {{ fmtAmount(ov.todayRealtime.amount) }}<span class="rt-unit">万元</span>
-              </div>
-            </div>
-            <div class="rt-side">
-              较昨日同时段
-              <b :class="rateClass(ov.todayRealtime.vsYesterday)">
-                {{ fmtPct(ov.todayRealtime.vsYesterday) }}
-              </b>
-              <br />
-              数据时间 {{ ov.asOf }}
-            </div>
-          </div>
-
-          <div class="sub-title">各业态销售（万元）</div>
-          <BizBarChart :data="ov.bizTypes" />
-        </PanelBox>
-
-        <!-- ④ 各业态昨日经营（11 张卡片） -->
-        <PanelBox class="a-cards" title="各业态昨日经营" sub="单位：万元 · 上排购物中心 / 下排业态汇总">
-          <div class="cards-wrap">
-            <div class="card-row card-row--5">
-              <BizCard v-for="c in mallCards" :key="'m-' + c.name" :card="c" />
-            </div>
-            <div class="card-row card-row--6">
-              <BizCard v-for="c in otherCards" :key="'o-' + c.type + '-' + c.name" :card="c" />
-            </div>
-          </div>
-        </PanelBox>
-
-        <!-- ⑤ 各门店销售总览 -->
-        <PanelBox class="a-stores" title="各门店销售总览" sub="单位：万元" tight>
-          <template #extra>{{ ov.stores.length }} 家门店</template>
-          <StoreTable :rows="ov.stores" />
-        </PanelBox>
       </main>
+
+      <!-- ======================= 底部说明 ======================= -->
+      <footer class="ft">
+        <span>佳和集团 · 经营数据驾驶舱 v1.0</span>
+        <span class="ft-sep">|</span>
+        <span>口径：集团各业态 POS 销售数据（含税），不含退货冲红</span>
+        <span class="ft-right" :class="{ 'ft-demo': ov.demo }">
+          {{ ov.demo ? '示例数据 · 用于版式演示，正式上线后接入实时接口' : '数据来源：经营数据接口' }}
+        </span>
+      </footer>
     </div>
   </div>
 </template>
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import PanelBox from '../components/PanelBox.vue'
-import TrendChart from '../components/TrendChart.vue'
-import BizBarChart from '../components/BizBarChart.vue'
-import StoreTable from '../components/StoreTable.vue'
+import KpiCard from '../components/KpiCard.vue'
 import BizCard from '../components/BizCard.vue'
+import RankList from '../components/RankList.vue'
+import TrendChart from '../components/TrendChart.vue'
+import PanelBox from '../components/PanelBox.vue'
 import { useScreenScale } from '../composables/useScreenScale'
-import { fetchOverview, demoOverview } from '../api/cockpit'
-import { fmtAmount, fmtPct, rateClass } from '../utils/format'
+import { fetchOverview } from '../api/cockpit'
+import { demoOverview } from '../mock/demo'
+import { fmtAmount } from '../utils/format'
 
-const { scale } = useScreenScale(1920, 1080)
+const { scale, canvasH } = useScreenScale(1920, 1080)
 
-/** 整屏数据（结构见 src/mock/demo.js 与后端 CockpitOverviewVO） */
+/* ---------------- 驾驶舱口径（集团 / 超市 / 百购） ---------------- */
+const SCOPES = {
+  group: { title: '佳和集团 · 经营数据驾驶舱', subtitle: 'JIAHE GROUP · OPERATING DASHBOARD' },
+  supermarket: { title: '佳和集团 · 超市驾驶舱', subtitle: 'JIAHE SUPERMARKET · OPERATING DASHBOARD' },
+  mall: { title: '佳和集团 · 百购驾驶舱', subtitle: 'JIAHE RETAIL MALL · OPERATING DASHBOARD' }
+}
+const scope = (() => {
+  const s = new URLSearchParams(location.search).get('scope')
+  return s && SCOPES[s] ? s : 'group'
+})()
+const scopeMeta = SCOPES[scope]
+
+/** 整屏数据（结构见 src/cockpit/mock/demo.js） */
 const ov = ref(demoOverview)
 
 /* ---------------- 顶部时钟 ---------------- */
@@ -148,68 +106,76 @@ const now = ref(new Date())
 const clock = computed(() => {
   const d = now.value
   const p = (n) => String(n).padStart(2, '0')
-  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+  return `${p(d.getHours())}:${p(d.getMinutes())}`
 })
-const dateText = computed(() => {
+const dataDate = computed(() => {
   const d = now.value
   const p = (n) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
 })
-const weekText = computed(() => '星期' + '日一二三四五六'[now.value.getDay()])
-
-/* ---------------- 数据加载 ---------------- */
-const loading = ref(false)
-let refreshTimer = null
-let clockTimer = null
-
-async function load() {
-  loading.value = true
-  try {
-    const res = await fetchOverview()
-    if (res) ov.value = res
-  } catch (e) {
-    // 后端没起来时退回示例数据，保证大屏不白屏；角标会提示「示例数据」
-    ov.value = demoOverview
-    console.warn('[驾驶舱] 接口未连通，使用示例数据：', e.message)
-  } finally {
-    loading.value = false
-  }
-}
 
 /* ---------------- 派生数据 ---------------- */
 const trendTotal = computed(() =>
   (ov.value.trend7d || []).reduce((s, r) => s + Number(r.amount || 0), 0)
 )
-const mallCards = computed(() => (ov.value.bizCards || []).filter((c) => c.type === '购物中心'))
-const otherCards = computed(() => (ov.value.bizCards || []).filter((c) => c.type !== '购物中心'))
+const rankTotal = computed(() =>
+  (ov.value.ranking || []).reduce((s, r) => s + Number(r.amount || 0), 0)
+)
 
-/* ---------------- 全屏 ---------------- */
-const isFullscreen = ref(false)
+/* ---------------- 数据加载 ---------------- */
 
-function toggleFullscreen() {
-  if (!document.fullscreenElement) {
-    document.documentElement.requestFullscreen?.().catch(() => {})
-  } else {
-    document.exitFullscreen?.()
-  }
+/**
+ * 后端目前还是旧 VO 结构（todayRealtime/groupYesterday/bizTypes/stores），
+ * 与本页要的 kpis/bizCards/ranking/trend7d 字段对不上。
+ * 直接整份覆盖会渲染成空数值，所以这里做一次结构校验：
+ * 四块形状都符合才认为后端已升级，否则整体退回示例数据。
+ *
+ * TODO 后端 VO 改成新结构后，这里的校验可以简化成 `if (res && res.kpis)`。
+ */
+function isNewShape(r) {
+  if (!r || typeof r !== 'object') return false
+  const kpis = r.kpis
+  const cards = r.bizCards
+  const rank = r.ranking
+  const trend = r.trend7d
+  return (
+    Array.isArray(kpis) && kpis.length > 0 && kpis.every((k) => k && k.key && k.label && k.tone) &&
+    Array.isArray(cards) && cards.length > 0 && cards.every((c) => c && c.tone && c.amount != null) &&
+    Array.isArray(rank) && rank.length > 0 && rank.every((x) => x && x.color && x.amount != null) &&
+    Array.isArray(trend) && trend.length > 0 && trend.every((p) => p && p.date && p.amount != null)
+  )
 }
 
-function onFsChange() {
-  isFullscreen.value = !!document.fullscreenElement
+let refreshTimer = null
+let clockTimer = null
+
+async function load() {
+  try {
+    const res = await fetchOverview({ scope })
+    if (isNewShape(res)) {
+      ov.value = { ...res, demo: false }
+    } else {
+      // 后端结构未升级：保持示例数据，不覆盖
+      ov.value = demoOverview
+      console.warn('[驾驶舱] 后端返回结构与页面不一致，继续使用示例数据')
+    }
+  } catch (e) {
+    // 后端没起来时退回示例数据，保证大屏不白屏
+    ov.value = demoOverview
+    console.warn('[驾驶舱] 接口未连通，使用示例数据：', e.message)
+  }
 }
 
 /* ---------------- 生命周期 ---------------- */
 onMounted(() => {
   load()
   clockTimer = setInterval(() => (now.value = new Date()), 1000)
-  // 大屏常驻：每分钟刷新一次（后续接实时数据可改 30s / 10s）
+  // 大屏常驻：每分钟刷新一次（接实时数据后可调短）
   refreshTimer = setInterval(load, 60 * 1000)
-  document.addEventListener('fullscreenchange', onFsChange)
 })
 
 onBeforeUnmount(() => {
   clearInterval(clockTimer)
   clearInterval(refreshTimer)
-  document.removeEventListener('fullscreenchange', onFsChange)
 })
 </script>

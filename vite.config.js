@@ -11,7 +11,7 @@ export default defineConfig({
     proxy: {
       // Consumer 请求 → 8002（登录、用户等）
       '/api/consumer': {
-        target: 'http://localhost:8002',
+        target: 'http://localhost:8006',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, '')
       },

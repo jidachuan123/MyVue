@@ -1,80 +1,148 @@
 /**
- * 前端兜底示例数据（仅当后端 /provider/cockpit/overview 取不到时使用）
+ * 驾驶舱首页示例数据（2026-11-11 按参考图重做）
  *
- * ⚠️ 这里的数字全部是构造出来的示例值（各层级之间已刻意对齐：
- *    门店明细 = 业态卡片 = 柱状图 = 集团合计 1862.34 万元），只用于验证版式。
- *    真实数据接上来之后，这个文件只在「后端没启动」时兜底，页面会打「示例数据」角标。
+ * ⚠️ 这里的数字全部是构造出来的示例值，只用于验证版式。
+ *    后端接入真实数据后，本文件只在「接口不可用」时兜底，页面右上角会显示「示例数据」角标。
+ *
+ * 数据结构（与 views/Cockpit.vue 一一对应）：
+ *   kpis      顶部 4 张 KPI 卡
+ *   bizCards  中部 8 张业态卡（前 7 张为业态，第 8 张为集团客流）
+ *   ranking   右侧「各业态销售」排行
+ *   trend7d   底部近 7 日销售趋势
  */
-
 export const demoOverview = {
-  asOf: '2026-10-28 21:30',
+  asOf: '2026-11-10 11:00',
   demo: true,
 
-  // 今日实时（T+0）
-  todayRealtime: {
-    amount: 428.66,
-    asOfTime: '13:57',
-    vsYesterday: 0.0682
-  },
-
-  // 集团口径
-  groupYesterday: { amount: 1862.34, dod: -0.0432, yoy: 0.0871 },
-  monthToDate: { amount: 37072.3, mom: 0.0312, yoy: 0.0654 },
-  yearToDate: { amount: 444923.0, yoy: 0.0412 },
-
-  // 近 7 天趋势（lastYear = 去年同期，用于画对照虚线）
-  trend7d: [
-    { date: '10-22', amount: 1720.4, lastYear: 1630.2 },
-    { date: '10-23', amount: 1798.2, lastYear: 1690.5 },
-    { date: '10-24', amount: 2105.6, lastYear: 1980.3 },
-    { date: '10-25', amount: 2380.9, lastYear: 2150.7 },
-    { date: '10-26', amount: 1960.3, lastYear: 1880.4 },
-    { date: '10-27', amount: 1946.2, lastYear: 1820.6 },
-    { date: '10-28', amount: 1862.3, lastYear: 1712.8 }
+  /* ---------------- 顶部 4 张 KPI ---------------- */
+  kpis: [
+    {
+      key: 'yesterday',
+      label: '昨日集团销售（万元）',
+      amount: 486.2,
+      unit: '万元',
+      tone: 'white',
+      rates: [
+        { label: '日环比', value: 0.038 },
+        { label: '年同比', value: 0.064 }
+      ],
+      foot: [
+        { label: '月累计', value: 2886.5, trend: 0.041 },
+        { label: '年累计', value: 82480.7, trend: 0.058 }
+      ]
+    },
+    {
+      key: 'realtime',
+      label: '今日实时销售',
+      amount: 128.6,
+      unit: '万元',
+      tone: 'pink',
+      side: { prefix: '截至 11:00 较昨日同时段', value: 0.042 },
+      progress: { label: '进度达成', value: 0.264 }
+    },
+    {
+      key: 'month',
+      label: '本月累计销售',
+      amount: 2836.5,
+      unit: '万元',
+      tone: 'cyan',
+      rates: [
+        { label: '月环比', value: 0.021 },
+        { label: '年同比', value: 0.039 }
+      ]
+    },
+    {
+      key: 'year',
+      label: '本年累计销售',
+      amount: 32480.7,
+      unit: '万元',
+      tone: 'green',
+      rates: [{ label: '年同比', value: 0.072 }],
+      progress: { label: '年度目标达成', value: 0.866 }
+    }
   ],
 
-  // 今日各业态（柱状图）
-  bizTypes: [
-    { name: '商管业态', amount: 1282.2 },
-    { name: '超市业态', amount: 344.9 },
-    { name: '便利店业态', amount: 73.6 },
-    { name: '佳和餐饮', amount: 68.2 },
-    { name: '佳和畅通', amount: 41.3 },
-    { name: '佳和酒店', amount: 32.6 },
-    { name: '其他自营业态', amount: 19.54 }
-  ],
-
-  // 各门店销售总览（滚动表格）
-  stores: [
-    { seq: 1, name: '海湾佳和诚购物中心', region: '菏泽市区', yesterday: 428.6, yoy: 0.1084, mom: 0.0318, grossRate: 0.2135, avgTicket: 86.5, customers: 4954 },
-    { seq: 2, name: '海湾佳和里购物中心', region: '菏泽市区', yesterday: 336.2, yoy: 0.0716, mom: -0.0138, grossRate: 0.2051, avgTicket: 79.2, customers: 4245 },
-    { seq: 3, name: '巨野中心店', region: '巨野', yesterday: 168.4, yoy: 0.0562, mom: 0.0214, grossRate: 0.1984, avgTicket: 62.4, customers: 2699 },
-    { seq: 4, name: '巨野天悦城店', region: '巨野', yesterday: 196.7, yoy: 0.1338, mom: 0.0456, grossRate: 0.2213, avgTicket: 65.8, customers: 2989 },
-    { seq: 5, name: '单县佳和汇', region: '单县', yesterday: 152.3, yoy: -0.0312, mom: -0.0524, grossRate: 0.1872, avgTicket: 58.9, customers: 2586 },
-    { seq: 6, name: '佳和超市样板店', region: '菏泽市区', yesterday: 218.4, yoy: 0.0412, mom: 0.0128, grossRate: 0.1763, avgTicket: 42.6, customers: 5127 },
-    { seq: 7, name: '佳和超市人民路店', region: '菏泽市区', yesterday: 62.1, yoy: 0.0226, mom: -0.0084, grossRate: 0.1685, avgTicket: 39.8, customers: 1560 },
-    { seq: 8, name: '佳和超市牡丹路店', region: '菏泽市区', yesterday: 48.6, yoy: 0.0674, mom: 0.0212, grossRate: 0.1702, avgTicket: 41.2, customers: 1179 },
-    { seq: 9, name: '佳和超市长江路店', region: '菏泽市区', yesterday: 15.8, yoy: -0.0842, mom: -0.0316, grossRate: 0.1621, avgTicket: 37.5, customers: 421 },
-    { seq: 10, name: '佳和便利店001', region: '菏泽市区', yesterday: 43.2, yoy: 0.0956, mom: 0.0284, grossRate: 0.2245, avgTicket: 28.6, customers: 1510 },
-    { seq: 11, name: '佳和便利店002', region: '菏泽市区', yesterday: 30.4, yoy: 0.0428, mom: -0.0112, grossRate: 0.2187, avgTicket: 26.4, customers: 1152 },
-    { seq: 12, name: '佳和餐饮中心店', region: '菏泽市区', yesterday: 68.2, yoy: 0.1186, mom: 0.0532, grossRate: 0.5842, avgTicket: 126.8, customers: 538 },
-    { seq: 13, name: '佳和畅通', region: '菏泽市区', yesterday: 41.3, yoy: 0.0324, mom: 0.0086, grossRate: 0.1425, avgTicket: 118.4, customers: 349 },
-    { seq: 14, name: '佳和酒店', region: '菏泽市区', yesterday: 32.6, yoy: -0.0248, mom: -0.0142, grossRate: 0.6128, avgTicket: 428.5, customers: 76 },
-    { seq: 15, name: '其他自营', region: '菏泽市区', yesterday: 19.54, yoy: 0.0156, mom: 0.0042, grossRate: 0.2341, avgTicket: 46.2, customers: 423 }
-  ],
-
-  // 底部业态卡片（11 张）
+  /* ---------------- 中部 8 张业态卡 ---------------- */
   bizCards: [
-    { name: '海湾佳和诚', type: '购物中心', yesterday: 428.6, dod: 0.0318, yoy: 0.1084, monthAcc: 8520.6, yearAcc: 103240.5 },
-    { name: '海湾佳和里', type: '购物中心', yesterday: 336.2, dod: -0.0138, yoy: 0.0716, monthAcc: 6680.2, yearAcc: 81240.8 },
-    { name: '巨野中心店', type: '购物中心', yesterday: 168.4, dod: 0.0214, yoy: 0.0562, monthAcc: 3382.4, yearAcc: 40128.6 },
-    { name: '巨野天悦店', type: '购物中心', yesterday: 196.7, dod: 0.0456, yoy: 0.1338, monthAcc: 3925.8, yearAcc: 46210.3 },
-    { name: '单县佳和汇', type: '购物中心', yesterday: 152.3, dod: -0.0524, yoy: -0.0312, monthAcc: 3060.5, yearAcc: 37105.2 },
-    { name: '佳和超市', type: '样板店', yesterday: 344.9, dod: 0.0128, yoy: 0.0412, monthAcc: 6820.4, yearAcc: 81050.6 },
-    { name: '佳和超市', type: '便利店', yesterday: 73.6, dod: 0.0196, yoy: 0.0742, monthAcc: 1462.8, yearAcc: 17428.9 },
-    { name: '佳和餐饮', type: '餐饮', yesterday: 68.2, dod: 0.0532, yoy: 0.1186, monthAcc: 1358.4, yearAcc: 16204.5 },
-    { name: '佳和畅通', type: '物流', yesterday: 41.3, dod: 0.0086, yoy: 0.0324, monthAcc: 820.6, yearAcc: 9850.2 },
-    { name: '佳和酒店', type: '酒店', yesterday: 32.6, dod: -0.0142, yoy: -0.0248, monthAcc: 652.4, yearAcc: 7812.6 },
-    { name: '其他自营业态', type: '其他', yesterday: 19.54, dod: 0.0042, yoy: 0.0156, monthAcc: 388.2, yearAcc: 4650.8 }
+    {
+      key: 'sy', name: '佳和商管', tag: '商管运营', tone: 'orange',
+      amount: 78.4, dod: 0.026, yoy: 0.048,
+      share: 0.161, extraLabel: '出租率', extraValue: '96.4%',
+      monthAcc: 452.8, yearAcc: 5186.4,
+      spark: [62, 66, 64, 70, 69, 74, 72, 78]
+    },
+    {
+      key: 'std', name: '佳和超市（标超）', tag: '大卖场', tone: 'cyan',
+      amount: 152.6, dod: 0.052, yoy: 0.071,
+      share: 0.314, extraLabel: '客单价', extraValue: '168.2 元',
+      monthAcc: 892.6, yearAcc: 10248.5,
+      spark: [118, 126, 121, 133, 140, 136, 145, 152]
+    },
+    {
+      key: 'cvs', name: '佳和超市（便利店）', tag: '社区生活', tone: 'green',
+      amount: 86.2, dod: 0.041, yoy: 0.060,
+      share: 0.177, extraLabel: '客单价', extraValue: '42.6 元',
+      monthAcc: 498.4, yearAcc: 5642.8,
+      spark: [66, 70, 68, 74, 77, 75, 81, 86]
+    },
+    {
+      key: 'food', name: '佳和餐饮', tag: '餐饮服务', tone: 'gold',
+      amount: 42.8, dod: -0.012, yoy: 0.034,
+      share: 0.088, extraLabel: '翻台率', extraValue: '3.2 次',
+      monthAcc: 248.6, yearAcc: 2826.4,
+      spark: [44, 46, 43, 45, 47, 44, 43, 42]
+    },
+    {
+      key: 'hotel', name: '佳和酒店', tag: '房务经营', tone: 'pink',
+      amount: 36.5, dod: 0.018, yoy: 0.052,
+      share: 0.075, extraLabel: '出租率', extraValue: '81.8%',
+      monthAcc: 212.5, yearAcc: 2418.6,
+      spark: [31, 33, 32, 35, 34, 36, 35, 36]
+    },
+    {
+      key: 'health', name: '佳和康养', tag: '康养增速', tone: 'purple',
+      amount: 63.7, dod: -0.024, yoy: 0.021,
+      share: 0.131, extraLabel: '入住率', extraValue: '82.6%',
+      monthAcc: 365.2, yearAcc: 4186.2,
+      spark: [58, 62, 60, 64, 66, 63, 65, 63]
+    },
+    {
+      key: 'other', name: '其他自营业态', tag: '生活服务', tone: 'blue',
+      amount: 26.0, dod: 0.009, yoy: 0.016,
+      share: 0.054, extraLabel: '坪效', extraValue: '1,286 元',
+      monthAcc: 166.4, yearAcc: 1971.8,
+      spark: [22, 23, 22, 24, 25, 24, 25, 26]
+    },
+    {
+      key: 'traffic', name: '集团客流（昨日）', tag: '客流量', tone: 'teal',
+      isTraffic: true,
+      amount: 42860, unit: '人次',
+      extraLabel: '日均', extraValue: '6.18 万',
+      yoy: 0.034,
+      extra2Label: '人均消费', extra2Value: '113.4 元',
+      spark: [39000, 40500, 39800, 41200, 42000, 41500, 42860]
+    }
+  ],
+
+  /* ---------------- 右侧各业态排行 ---------------- */
+  ranking: [
+    { seq: 1, name: '标超', amount: 152.6, color: '#ff8a4c' },
+    { seq: 2, name: '便利店', amount: 86.2, color: '#31e6a8' },
+    { seq: 3, name: '佳和商管', amount: 78.4, color: '#3fe3ff' },
+    { seq: 4, name: '佳和康养', amount: 63.7, color: '#31e6a8' },
+    { seq: 5, name: '佳和餐饮', amount: 42.8, color: '#ffcf5c' },
+    { seq: 6, name: '佳和酒店', amount: 36.5, color: '#ff6ea9' },
+    { seq: 7, name: '其他自营业态', amount: 26.0, color: '#a06bff' }
+  ],
+
+  /* ---------------- 底部近 7 日趋势 ---------------- */
+  trend7d: [
+    { date: '11-04', amount: 428.6 },
+    { date: '11-05', amount: 452.3 },
+    { date: '11-06', amount: 468.9 },
+    { date: '11-07', amount: 441.2 },
+    { date: '11-08', amount: 475.6 },
+    { date: '11-09', amount: 458.4 },
+    { date: '11-10', amount: 485.2 }
   ]
 }
