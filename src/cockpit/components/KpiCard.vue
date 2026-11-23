@@ -21,7 +21,7 @@
       <div v-if="kpi.foot && kpi.foot.length" class="kpi-foot">
         <span v-for="f in kpi.foot" :key="f.label" class="kpi-foot-item">
           {{ f.label }}
-          <b class="num">{{ fmtAmount(f.value, 1) }}</b>
+          <b class="num">{{ fmtAmount(f.value, 2) }}</b>
           <i :class="rateClass(f.trend)">{{ fmtPctArrow(f.trend).text }}</i>
         </span>
       </div>
@@ -37,7 +37,7 @@
       <div v-if="kpi.progress" class="kpi-progress">
         <div class="kpi-progress-text">
           {{ kpi.progress.label }}
-          <b>{{ fmtPct(kpi.progress.value, 1) }}</b>
+          <b>{{ fmtPct(kpi.progress.value, 2) }}</b>
         </div>
         <div class="kpi-progress-bar">
           <i :style="{ width: barWidth(kpi.progress.value) }"></i>
@@ -49,17 +49,17 @@
 
 <script setup>
 import { computed } from 'vue'
-import { fmtAmount, fmtPct, fmtPctArrow, fmtInt, rateClass } from '../utils/format'
+import { fmtAmount, fmtPct, fmtPctArrow, rateClass } from '../utils/format'
 
 const props = defineProps({
   kpi: { type: Object, required: true }
 })
 
-/** 大数值用整数展示（年累计动辄几万），小额保留 1 位小数 */
+/** 金额统一保留 2 位小数（2026-11-23 按业务要求） */
 const displayValue = computed(() => {
   const n = Number(props.kpi.amount)
   if (!Number.isFinite(n)) return '-'
-  return n >= 10000 ? fmtInt(n) : fmtAmount(n, 1)
+  return fmtAmount(n, 2)
 })
 
 function barWidth(v) {

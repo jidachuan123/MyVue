@@ -40,7 +40,7 @@
   --c-green: #31e6a8;
   --c-teal: #2ee6d6;
 
-  /* ---- 涨跌（沿用项目既有口径：涨=绿、跌=红） ---- */
+  /* ---- 状态色（--c-up 现用于「数据实时同步」绿灯；涨跌文案配色见文件末尾 .up/.down） ---- */
   --c-up: #31e6a8;
   --c-down: #ff5f7a;
 
@@ -634,8 +634,9 @@ body {
 }
 
 .rank-name {
-  flex: 0 0 96px;
-  font-size: 14.5px;
+  /* 8 项里含购物中心全名，留够宽度避免省略号 */
+  flex: 0 0 124px;
+  font-size: 14.0px;
   color: #cfe4ff;
   white-space: nowrap;
   overflow: hidden;
@@ -791,8 +792,9 @@ body {
   letter-spacing: 0.5px;
 }
 
-.up   { color: var(--c-up);   text-shadow: 0 0 10px rgba(49, 230, 168, 0.35); }
-.down { color: var(--c-down); text-shadow: 0 0 10px rgba(255, 95, 122, 0.35); }
+/* 涨跌配色（2026-11-23 按业务要求：上升=红、下降=绿） */
+.up   { color: #ff5f7a; text-shadow: 0 0 10px rgba(255, 95, 122, 0.35); }
+.down { color: #31e6a8; text-shadow: 0 0 10px rgba(49, 230, 168, 0.35); }
 .flat { color: var(--c-text-3); }
 
 .chart-box {

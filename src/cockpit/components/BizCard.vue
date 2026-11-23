@@ -41,21 +41,21 @@
           </div>
         </template>
         <template v-else>
-          <div class="biz-metric">占集团比重 <b>{{ fmtPct(card.share, 1) }}</b></div>
+          <div class="biz-metric">占集团比重 <b>{{ fmtPct(card.share, 2) }}</b></div>
           <div class="biz-metric">{{ card.extraLabel }} <b>{{ card.extraValue }}</b></div>
         </template>
       </div>
 
       <!-- 环形占比图（客流卡不显示） -->
       <div v-if="!card.isTraffic" class="biz-ring" :style="ringStyle">
-        <span>{{ fmtPct(card.share, 1) }}</span>
+        <span>{{ fmtPct(card.share, 2) }}</span>
       </div>
     </div>
 
     <!-- 底部累计 -->
     <div v-if="!card.isTraffic" class="biz-foot">
-      <span>月累计 <b>{{ fmtAmount(card.monthAcc, 1) }}</b></span>
-      <span>年累计 <b>{{ fmtAmount(card.yearAcc, 1) }}</b></span>
+      <span>月累计 <b>{{ fmtAmount(card.monthAcc, 2) }}</b></span>
+      <span>年累计 <b>{{ fmtAmount(card.yearAcc, 2) }}</b></span>
     </div>
   </div>
 </template>
@@ -83,8 +83,8 @@ const TONE_COLORS = {
 const displayValue = computed(() => {
   const n = Number(props.card.amount)
   if (!Number.isFinite(n)) return '-'
-  // 客流是「人次」，用整数 + 千分位；金额统一 1 位小数
-  return props.card.isTraffic ? fmtInt(n) : fmtAmount(n, 1)
+  // 客流是「人次」，用整数 + 千分位；金额统一保留 2 位小数
+  return props.card.isTraffic ? fmtInt(n) : fmtAmount(n, 2)
 })
 
 /** 环形占比：用 conic-gradient 画，无需 SVG，性能最好 */

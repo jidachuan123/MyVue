@@ -19,11 +19,11 @@ useChart(el, buildOption, () => props.data)
 function buildOption(list) {
   const rows = Array.isArray(list) ? list : []
   const dates = rows.map((r) => r.date)
-  // 首点太靠左会压住 Y 轴刻度，直接不显示；末点向左偏移，避免超出右边界
+  // 首点也要显示数值：向右偏移，避免压住 Y 轴刻度；末点向左偏移，避免超出右边界
   const values = rows.map((r, i) => {
     const label = {}
     if (i === 0) {
-      label.show = false
+      label.offset = [16, 0]
     } else if (i === rows.length - 1) {
       label.position = 'left'
       label.distance = 10
@@ -42,7 +42,7 @@ function buildOption(list) {
       axisPointer: { lineStyle: { color: 'rgba(96,198,255,0.45)' } },
       formatter: (ps) => {
         const p = ps[0]
-        return `${p.name}<br/>集团合计：<b>${Number(p.value).toFixed(1)}</b> 万元`
+        return `${p.name}<br/>集团合计：<b>${Number(p.value).toFixed(2)}</b> 万元`
       }
     },
     xAxis: {
@@ -99,7 +99,7 @@ function buildOption(list) {
           color: '#bfe6ff',
           fontSize: 12,
           fontFamily: 'Bahnschrift, Consolas, monospace',
-          formatter: (p) => Number(p.value).toFixed(1)
+          formatter: (p) => Number(p.value).toFixed(2)
         }
       }
     ]

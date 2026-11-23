@@ -6,7 +6,7 @@
       <span class="rank-track">
         <i :style="{ width: barWidth(item.amount), background: item.color }"></i>
       </span>
-      <span class="rank-amt num">{{ fmtAmount(item.amount, 1) }}</span>
+      <span class="rank-amt num">{{ fmtAmount(item.amount, 2) }}</span>
     </div>
   </div>
 </template>
@@ -20,10 +20,8 @@ const props = defineProps({
   items: { type: Array, default: () => [] }
 })
 
-/** 按金额降序，并重新编号（后端给什么顺序都稳妥） */
-const rows = computed(() =>
-  [...props.items].sort((a, b) => Number(b.amount) - Number(a.amount))
-)
+/** 严格按后端给的顺序渲染（2026-11-23 业务要求固定排序，不按金额重排） */
+const rows = computed(() => [...props.items])
 
 const maxAmount = computed(() =>
   Math.max(1, ...rows.value.map((r) => Number(r.amount) || 0))

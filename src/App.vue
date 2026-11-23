@@ -197,7 +197,12 @@ const logout = () => {
       </header>
 
       <main class="app-content" :class="{ 'app-content--flush': isCockpitPage }">
-        <router-view />
+        <!-- 驾驶舱用 iframe 嵌入：用 keep-alive 缓存，切换菜单再回来时不再重新加载大屏 -->
+        <router-view v-slot="{ Component }">
+          <keep-alive include="CockpitView">
+            <component :is="Component" />
+          </keep-alive>
+        </router-view>
       </main>
     </div>
   </div>

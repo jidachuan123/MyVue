@@ -19,7 +19,7 @@
         </div>
 
         <div class="hd-right">
-          <span class="hd-live"><i class="dot"></i>数据实时同步</span>
+          <span class="hd-live"><i class="dot"></i>数据每小时同步</span>
           <span class="hd-meta">数据日期：<b class="num">{{ dataDate }}</b></span>
           <span class="hd-meta">更新时间：<b class="num">{{ clock }}</b></span>
         </div>
@@ -35,13 +35,23 @@
         <!-- ② 中部：8 张业态卡 + 右侧排名 -->
         <div class="row-biz">
           <div class="biz-grid">
-            <BizCard v-for="c in ov.bizCards" :key="c.key" :card="c" />
+            <!-- 购物中心卡片可点击下钻；业态卡没有 storeId，不响应点击 -->
+            <div
+              v-for="c in ov.bizCards"
+              :key="c.key"
+              class="biz-cell"
+              :class="{ 'biz-cell--clickable': !!(c.storeId || c.classCode) }"
+              :title="c.storeId ? '点击查看门店下钻明细' : (c.classCode ? '点击查看业态下钻明细' : '')"
+              @click="openDetail(c)"
+            >
+              <BizCard :card="c" />
+            </div>
           </div>
 
           <PanelBox class="biz-rank" title="各业态销售" sub="昨日 · 万元" tight>
             <template #extra>
               <span class="rank-total">
-                合计 <b class="num">{{ fmtAmount(rankTotal, 1) }}</b>
+                合计 <b class="num">{{ fmtAmount(rankTotal, 2) }}</b>
               </span>
             </template>
             <RankList :items="ov.ranking" />
@@ -52,7 +62,7 @@
         <PanelBox class="row-trend" title="销售趋势（近 7 日）" sub="集团合计 · 单位：万元">
           <template #extra>
             <span class="trend-extra">
-              7 日合计 <b class="num">{{ fmtAmount(trendTotal, 1) }}</b>
+              7 日合计 <b class="num">{{ fmtAmount(trendTotal, 2) }}</b>
             </span>
           </template>
           <TrendChart :data="ov.trend7d" />
@@ -69,6 +79,14 @@
         </span>
       </footer>
     </div>
+
+    <!-- 门店下钻弹窗：放在缩放容器外，避免被 transform 缩放 -->
+    <StoreDetailModal
+      v-model="detailOpen"
+      :store-id="detailStoreId"
+      :class-code="detailClassCode"
+      :store-name="detailStoreName"
+    />
   </div>
 </template>
 
@@ -79,6 +97,7 @@ import BizCard from '../components/BizCard.vue'
 import RankList from '../components/RankList.vue'
 import TrendChart from '../components/TrendChart.vue'
 import PanelBox from '../components/PanelBox.vue'
+import StoreDetailModal from '../components/StoreDetailModal.vue'
 import { useScreenScale } from '../composables/useScreenScale'
 import { fetchOverview } from '../api/cockpit'
 import { demoOverview } from '../mock/demo'
@@ -99,7 +118,48 @@ const scope = (() => {
 const scopeMeta = SCOPES[scope]
 
 /** 整屏数据（结构见 src/cockpit/mock/demo.js） */
-const ov = ref(demoOverview)
+const CACHE_KEY = `cockpit-overview:${scope}`
+
+/** 读取本标签页上次成功取到的数据（避免每次进入先闪一下示例数据） */
+function readCache() {
+  try {
+    const raw = sessionStorage.getItem(CACHE_KEY)
+    if (!raw) return null
+    const data = JSON.parse(raw)
+    return isNewShape(data) ? data : null
+  } catch (e) {
+    return null
+  }
+}
+
+const ov = ref(readCache() || demoOverview)
+
+/* ---------------- 门店下钻 ---------------- */
+const detailOpen = ref(false)
+const detailStoreId = ref('')
+const detailClassCode = ref('')
+const detailStoreName = ref('')
+
+function openDetail(card) {
+  if (!card) return
+  if (card.storeId) {
+    detailStoreId.value = card.storeId
+    detailClassCode.value = ''
+  } else if (card.classCode) {
+    detailStoreId.value = ''
+    detailClassCode.value = card.classCode
+  } else {
+    return
+  }
+  detailStoreName.value = card.name
+  detailOpen.value = true
+}
+
+function onKeydown(e) {
+  if (e.key === 'Escape' && detailOpen.value) {
+    detailOpen.value = false
+  }
+}
 
 /* ---------------- 顶部时钟 ---------------- */
 const now = ref(new Date())
@@ -154,28 +214,64 @@ async function load() {
     const res = await fetchOverview({ scope })
     if (isNewShape(res)) {
       ov.value = { ...res, demo: false }
+      // 缓存本次成功结果，下次进入驾驶舱时直接展示，不再先闪示例数据
+      try {
+        sessionStorage.setItem(CACHE_KEY, JSON.stringify(ov.value))
+      } catch (e) {
+        /* 隐私模式/配额满时忽略缓存失败，不影响展示 */
+      }
     } else {
-      // 后端结构未升级：保持示例数据，不覆盖
-      ov.value = demoOverview
-      console.warn('[驾驶舱] 后端返回结构与页面不一致，继续使用示例数据')
+      // 后端结构不符：没有真实数据可展示时才退回示例数据
+      if (!ov.value || ov.value.demo) ov.value = demoOverview
+      console.warn('[驾驶舱] 后端返回结构与页面不一致，保留上次数据')
     }
   } catch (e) {
-    // 后端没起来时退回示例数据，保证大屏不白屏
-    ov.value = demoOverview
-    console.warn('[驾驶舱] 接口未连通，使用示例数据：', e.message)
+    // 取数失败：保留上一次的数据（宁可显示旧数据，也不要闪回示例数据）
+    if (!ov.value || ov.value.demo) ov.value = demoOverview
+    console.warn('[驾驶舱] 接口未连通，保留上次数据：', e.message)
   }
 }
 
 /* ---------------- 生命周期 ---------------- */
-onMounted(() => {
-  load()
+onMounted(async () => {
   clockTimer = setInterval(() => (now.value = new Date()), 1000)
-  // 大屏常驻：每分钟刷新一次（接实时数据后可调短）
-  refreshTimer = setInterval(load, 60 * 1000)
+  // 数据每小时同步一次（业务确认：无需每分钟刷新）
+  refreshTimer = setInterval(load, 60 * 60 * 1000)
+  window.addEventListener('keydown', onKeydown)
+
+  await load()
+
+  // 支持 ?detail=1303001 直接打开某门店下钻（联调/大屏直达用）
+  const preset = new URLSearchParams(location.search).get('detail')
+  if (preset) {
+    // 支持门店编码（如 1303001）或业态编码（如 21）直达
+    const card = (ov.value.bizCards || []).find((c) => c.storeId === preset || c.classCode === preset)
+    openDetail(card || { storeId: preset, name: preset })
+  }
 })
 
 onBeforeUnmount(() => {
   clearInterval(clockTimer)
   clearInterval(refreshTimer)
+  window.removeEventListener('keydown', onKeydown)
 })
 </script>
+
+<style scoped>
+/* 卡片网格单元：外包一层，便于整卡点击下钻（业态卡无 storeId，不响应） */
+.biz-cell {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+}
+.biz-cell > * {
+  flex: 1;
+  min-width: 0;
+}
+.biz-cell--clickable {
+  cursor: pointer;
+}
+.biz-cell--clickable:hover {
+  filter: brightness(1.12);
+}
+</style>
